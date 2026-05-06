@@ -21,6 +21,11 @@ test("service card opens details on hover and closes on mouse leave", async ({ p
 
   await page.mouse.move(20, 20);
   await expect(card).not.toHaveClass(/service-card--detail/);
+
+  await card.hover();
+  await expect(card).toHaveClass(/service-card--detail/);
+  await card.click({ position: { x: 24, y: 24 } });
+  await expect(card).not.toHaveClass(/service-card--detail/);
 });
 
 test("service cards show a reverse refresh countdown", async ({ page }) => {
@@ -64,4 +69,21 @@ test("live status is presented as a HUD card", async ({ page }) => {
 
   expect(borderRadius).not.toBe("0px");
   expect(background).toContain("linear-gradient");
+});
+
+test("logbook is prominent above modules", async ({ page }) => {
+  await page.goto("/");
+
+  const logbook = page.locator(".logbook");
+  await expect(logbook).toBeVisible();
+  await expect(logbook.getByRole("heading", { name: "Was passiert ist" })).toBeVisible();
+  await expect(logbook.getByText("Portal online")).toBeVisible();
+  await expect(logbook.getByText("HUD Interface aktiviert")).toBeVisible();
+  await expect(logbook.getByText("Service Panels erweitert")).toBeVisible();
+
+  const logbookBox = await logbook.boundingBox();
+  const modulesBox = await page.getByRole("heading", { name: "Module" }).boundingBox();
+  expect(logbookBox).not.toBeNull();
+  expect(modulesBox).not.toBeNull();
+  expect(logbookBox!.y).toBeLessThan(modulesBox!.y);
 });

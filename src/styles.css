@@ -344,6 +344,77 @@ p {
   margin-top: 20px;
 }
 
+.logbook {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(180px, 0.42fr) minmax(0, 1fr);
+  gap: 16px;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid rgba(255, 92, 105, 0.28);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(110deg, rgba(255, 61, 79, 0.16), transparent 36%),
+    linear-gradient(180deg, rgba(84, 210, 194, 0.08), rgba(8, 12, 18, 0.76));
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.24), inset 0 0 22px rgba(255, 61, 79, 0.05);
+}
+
+.logbook::before {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 46px;
+  height: 22px;
+  border-top: 2px solid rgba(255, 92, 105, 0.55);
+  border-right: 2px solid rgba(84, 210, 194, 0.5);
+  content: "";
+  pointer-events: none;
+}
+
+.logbook__heading span,
+.log-entry span {
+  color: var(--red-soft);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.logbook__heading h2 {
+  margin-top: 5px;
+}
+
+.logbook__entries {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.log-entry {
+  min-height: 128px;
+  padding: 13px;
+  border: 1px solid rgba(84, 210, 194, 0.22);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(135deg, rgba(84, 210, 194, 0.08), transparent 44%),
+    rgba(9, 15, 23, 0.66);
+}
+
+.log-entry h3 {
+  margin-top: 9px;
+  font-size: 16px;
+  line-height: 1.15;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.log-entry p {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .section-heading {
   display: flex;
   justify-content: space-between;
@@ -531,6 +602,10 @@ h2 {
   visibility: visible;
 }
 
+.service-card--detail .service-card__face--front {
+  visibility: hidden;
+}
+
 .detail-header {
   display: flex;
   align-items: center;
@@ -562,6 +637,10 @@ h2 {
   border: 1px solid rgba(84, 210, 194, 0.22);
   border-radius: var(--radius);
   background: rgba(84, 210, 194, 0.06);
+}
+
+.detail-copy {
+  max-width: 460px;
 }
 
 .service-actions {
@@ -1010,11 +1089,30 @@ h2 {
   .service-card--detail:focus-within .service-card__shell {
     min-height: 330px;
   }
+
+  .logbook {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 13px;
+  }
+
+  .logbook__entries {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .log-entry {
+    min-height: 112px;
+  }
 }
 
 @media (max-width: 980px) {
   .service-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .logbook,
+  .logbook__entries {
+    grid-template-columns: 1fr;
   }
 }
 

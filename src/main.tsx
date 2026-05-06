@@ -68,6 +68,24 @@ const wordPermutations = [
   ["Bo", "To", "Lu"]
 ] as const;
 
+const logbookEntries = [
+  {
+    title: "Portal online",
+    meta: "Log 001 / Public Gateway",
+    body: "Die Hauptseite ist als öffentlicher Einstieg aktiv. Voice, Auth und Realtime melden ihren Status live, ohne interne Ports oder Infrastrukturdetails offenzulegen."
+  },
+  {
+    title: "HUD Interface aktiviert",
+    meta: "Log 002 / Display System",
+    body: "Das Portal wurde auf ein Sci-Fi-Command-Display umgebaut: Raster, Statusmodule, rote Energieakzente und die rotierende ToLuBo-Kennung laufen jetzt im Frontend."
+  },
+  {
+    title: "Service Panels erweitert",
+    meta: "Log 003 / Interaction Layer",
+    body: "Die Dienstkacheln öffnen sich zu großen Detailpanels. Actions sind vorbereitet und können später direkt aus den jeweiligen Service-APIs ergänzt werden."
+  }
+];
+
 function shuffleSegments(): string[] {
   const next = wordPermutations[Math.floor(Math.random() * wordPermutations.length)] ?? wordPermutations[0];
   return [...next];
@@ -195,21 +213,21 @@ function ServiceCard({ service, generatedAt }: { service: PublicService; generat
   const Icon = iconMap[service.icon];
   const cardClassName = `service-card${isDetailOpen ? " service-card--detail" : ""}`;
 
-  function openDetail() {
-    setIsDetailOpen(true);
-  }
-
   function closeDetail() {
     setIsDetailOpen(false);
+  }
+
+  function toggleDetail() {
+    setIsDetailOpen((current) => !current);
   }
 
   return (
     <article
       className={cardClassName}
-      onClick={openDetail}
-      onMouseEnter={openDetail}
+      onClick={toggleDetail}
+      onMouseEnter={() => setIsDetailOpen(true)}
       onMouseLeave={closeDetail}
-      onFocus={openDetail}
+      onFocus={() => setIsDetailOpen(true)}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) {
           closeDetail();
@@ -250,7 +268,10 @@ function ServiceCard({ service, generatedAt }: { service: PublicService; generat
               <h3>{service.name}</h3>
             </div>
           </div>
-          <p>{service.description}</p>
+          <p className="detail-copy">
+            {service.description} Dieses Panel ist für Live-Details und Service-Actions vorbereitet,
+            sobald der Dienst seine öffentlichen Metadaten per API bereitstellt.
+          </p>
           <div className="detail-metrics">
             <span>Status: {stateLabels[service.state]}</span>
             <span>Update: {formatTime(service.updatedAt)}</span>
@@ -309,6 +330,26 @@ function Wordmark() {
   );
 }
 
+function Logbook() {
+  return (
+    <section className="logbook" aria-labelledby="logbook-title">
+      <div className="logbook__heading">
+        <span>Mission Log</span>
+        <h2 id="logbook-title">Was passiert ist</h2>
+      </div>
+      <div className="logbook__entries">
+        {logbookEntries.map((entry) => (
+          <article className="log-entry" key={entry.title}>
+            <span>{entry.meta}</span>
+            <h3>{entry.title}</h3>
+            <p>{entry.body}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function App() {
   const { snapshot, socketState } = useHealth();
   const services = snapshot?.services ?? [];
@@ -357,6 +398,8 @@ function App() {
         </div>
         <span>Letzte Aktualisierung: {formatTime(snapshot?.generatedAt ?? null)}</span>
       </section>
+
+      <Logbook />
 
       <section className="section-block" aria-labelledby="services-title">
         <div className="section-heading">
