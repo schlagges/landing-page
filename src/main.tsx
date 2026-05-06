@@ -1,0 +1,264 @@
+import {
+  Activity,
+  ArrowUpRight,
+  Clock3,
+  GitBranch,
+  Mic2,
+  RadioTower,
+  RefreshCw,
+  ShieldCheck
+} from "lucide-react";
+import { StrictMode, useEffect, useMemo, useState } from "react";
+import { createRoot } from "react-dom/client";
+import "./styles.css";
+
+type ServiceState = "online" | "degraded" | "offline" | "checking" | "planned";
+type ServiceCategory = "communication" | "identity" | "realtime" | "roadmap";
+
+type PublicService = {
+  id: string;
+  name: string;
+  category: ServiceCategory;
+  icon: "mic" | "shield" | "radio" | "gitlab";
+  href: string | null;
+  description: string;
+  state: ServiceState;
+  message: string;
+  updatedAt: string | null;
+  responseMs: number | null;
+};
+
+type HealthSnapshot = {
+  generatedAt: string;
+  overall: Exclude<ServiceState, "planned">;
+  services: PublicService[];
+};
+
+type SocketState = "connecting" | "live" | "fallback";
+
+const stateLabels: Record<ServiceState, string> = {
+  checking: "Prüfung",
+  degraded: "Eingeschränkt",
+  offline: "Offline",
+  online: "Online",
+  planned: "Geplant"
+};
+
+const overallLabels: Record<HealthSnapshot["overall"], string> = {
+  checking: "Status wird geprüft",
+  degraded: "Teilweise verfügbar",
+  offline: "Störung erkannt",
+  online: "Alle öffentlichen Dienste erreichbar"
+};
+
+const iconMap = {
+  gitlab: GitBranch,
+  mic: Mic2,
+  radio: RadioTower,
+  shield: ShieldCheck
+};
+
+function formatTime(value: string | null): string {
+  if (!value) {
+    return "Noch nicht geprüft";
+  }
+
+  return new Intl.DateTimeFormat("de-DE", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  }).format(new Date(value));
+}
+
+function useHealth(): { snapshot: HealthSnapshot | null; socketState: SocketState } {
+  const [snapshot, setSnapshot] = useState<HealthSnapshot | null>(null);
+  const [socketState, setSocketState] = useState<SocketState>("connecting");
+
+  useEffect(() => {
+    let closed = false;
+    let fallbackTimer: number | undefined;
+
+    async function loadSnapshot() {
+      try {
+        const response = await fetch("/api/health", { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error("Health snapshot unavailable");
+        }
+        const data = (await response.json()) as HealthSnapshot;
+        if (!closed) {
+          setSnapshot(data);
+        }
+      } catch {
+        if (!closed) {
+          setSocketState("fallback");
+        }
+      }
+    }
+
+    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    const socket = new WebSocket(`${protocol}://${window.location.host}/ws/health`);
+
+    socket.addEventListener("open", () => {
+      if (!closed) {
+        setSocketState("live");
+      }
+    });
+
+    socket.addEventListener("message", (event) => {
+      if (!closed) {
+        setSnapshot(JSON.parse(event.data as string) as HealthSnapshot);
+      }
+    });
+
+    socket.addEventListener("close", () => {
+      if (!closed) {
+        setSocketState("fallback");
+        void loadSnapshot();
+        fallbackTimer = window.setInterval(loadSnapshot, 10000);
+      }
+    });
+
+    socket.addEventListener("error", () => {
+      if (!closed) {
+        setSocketState("fallback");
+      }
+    });
+
+    void loadSnapshot();
+
+    return () => {
+      closed = true;
+      socket.close();
+      if (fallbackTimer) {
+        window.clearInterval(fallbackTimer);
+      }
+    };
+  }, []);
+
+  return { snapshot, socketState };
+}
+
+function StatusPill({ state }: { state: ServiceState }) {
+  return <span className={`status-pill status-${state}`}>{stateLabels[state]}</span>;
+}
+
+function ServiceCard({ service }: { service: PublicService }) {
+  const Icon = iconMap[service.icon];
+
+  return (
+    <article className="service-card">
+      <div className="service-card__topline">
+        <div className="service-icon" aria-hidden="true">
+          <Icon size={24} strokeWidth={2} />
+        </div>
+        <StatusPill state={service.state} />
+      </div>
+      <div>
+        <h3>{service.name}</h3>
+        <p>{service.description}</p>
+      </div>
+      <div className="service-card__meta">
+        <span>
+          <Clock3 size={15} aria-hidden="true" />
+          {formatTime(service.updatedAt)}
+        </span>
+        {service.responseMs !== null ? <span>{service.responseMs} ms</span> : <span>{service.message}</span>}
+      </div>
+      {service.href ? (
+        <a className="service-card__link" href={service.href}>
+          Öffnen
+          <ArrowUpRight size={17} aria-hidden="true" />
+        </a>
+      ) : (
+        <span className="service-card__disabled">Noch nicht verfügbar</span>
+      )}
+    </article>
+  );
+}
+
+function App() {
+  const { snapshot, socketState } = useHealth();
+  const services = snapshot?.services ?? [];
+  const activeServices = services.filter((service) => service.state !== "planned");
+  const plannedServices = services.filter((service) => service.state === "planned");
+
+  const onlineCount = useMemo(
+    () => activeServices.filter((service) => service.state === "online").length,
+    [activeServices]
+  );
+
+  return (
+    <main>
+      <section className="hero" aria-labelledby="page-title">
+        <div className="hero__content">
+          <div className="eyebrow">
+            <Activity size={16} aria-hidden="true" />
+            Öffentliches Diensteportal
+          </div>
+          <h1 id="page-title">schnick-schnack.info</h1>
+          <p>
+            Ein zentraler Einstieg zu den verfügbaren Diensten. Der Live-Status wird laufend
+            aktualisiert und zeigt nur öffentliche Verfügbarkeitsinformationen.
+          </p>
+        </div>
+        <aside className="status-panel" aria-label="Gesamtstatus">
+          <span className={`status-dot status-dot--${snapshot?.overall ?? "checking"}`} />
+          <div>
+            <strong>{snapshot ? overallLabels[snapshot.overall] : "Status wird geladen"}</strong>
+            <span>{onlineCount} von {activeServices.length || 3} Diensten online</span>
+          </div>
+        </aside>
+      </section>
+
+      <section className="live-strip" aria-label="Live Aktualisierung">
+        <div>
+          <RefreshCw size={17} aria-hidden="true" className={socketState === "live" ? "spin-soft" : ""} />
+          <span>{socketState === "live" ? "Live per WebSocket" : "Fallback per Abfrage"}</span>
+        </div>
+        <span>Letzte Aktualisierung: {formatTime(snapshot?.generatedAt ?? null)}</span>
+      </section>
+
+      <section className="section-block" aria-labelledby="services-title">
+        <div className="section-heading">
+          <div>
+            <h2 id="services-title">Verfügbare Dienste</h2>
+            <p>Direkte Einstiege zu den öffentlichen Anwendungen.</p>
+          </div>
+        </div>
+
+        <div className="service-grid">
+          {services.length > 0 ? (
+            activeServices.map((service) => <ServiceCard key={service.id} service={service} />)
+          ) : (
+            <>
+              <div className="skeleton" />
+              <div className="skeleton" />
+              <div className="skeleton" />
+            </>
+          )}
+        </div>
+      </section>
+
+      <section className="section-block section-block--split" aria-labelledby="roadmap-title">
+        <div>
+          <h2 id="roadmap-title">Als Nächstes</h2>
+          <p>
+            Weitere Dienste können ergänzt werden, sobald sie öffentlich erreichbar und für Besucher
+            relevant sind.
+          </p>
+        </div>
+        <div className="roadmap-list">
+          {plannedServices.map((service) => (
+            <ServiceCard key={service.id} service={service} />
+          ))}
+        </div>
+      </section>
+    </main>
+  );
+}
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>
+);

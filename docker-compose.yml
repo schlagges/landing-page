@@ -1,0 +1,13 @@
+services:
+  landing-page:
+    build: .
+    container_name: landing-page
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      HOST: 127.0.0.1
+      PORT: 8090
+      HEALTH_INTERVAL_MS: 10000
+      HEALTH_VOICE_URL: http://127.0.0.1:3000/
+      HEALTH_AUTH_URL: http://127.0.0.1:8081/realms/master/.well-known/openid-configuration
+      HEALTH_REALTIME_URL: http://127.0.0.1:7880/
