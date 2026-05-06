@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 
 type ServiceState = "online" | "degraded" | "offline" | "checking" | "planned";
-type ServiceCategory = "communication" | "identity" | "realtime" | "roadmap";
+type ServiceCategory = "communication" | "identity" | "realtime" | "development" | "roadmap";
 
 type PublicService = {
   id: string;
@@ -148,11 +148,13 @@ const targets: HealthTarget[] = [
   {
     id: "gitlab",
     name: "GitLab",
-    category: "roadmap",
+    category: "development",
     icon: "gitlab",
-    href: null,
-    description: "Code- und Projektplattform ist für eine spätere Erweiterung vorgesehen.",
-    infoUrl: null
+    href: "https://gitlab.schnick-schnack.info",
+    description: "Code- und Projektplattform für Repositories, Issues und spätere CI/CD-Abläufe.",
+    url: process.env.HEALTH_GITLAB_URL ?? "https://gitlab.schnick-schnack.info/",
+    infoUrl: process.env.INFO_GITLAB_URL ?? defaultInfoUrl("https://gitlab.schnick-schnack.info"),
+    okStatuses: [200, 204, 301, 302, 307, 308, 401, 403]
   }
 ];
 

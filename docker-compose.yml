@@ -11,3 +11,5 @@ services:
       HEALTH_VOICE_URL: http://127.0.0.1:3000/
       HEALTH_AUTH_URL: http://127.0.0.1:8081/realms/master/.well-known/openid-configuration
       HEALTH_REALTIME_URL: http://127.0.0.1:7880/
+      HEALTH_GITLAB_URL: http://127.0.0.1:8082/
+      INFO_GITLAB_URL: http://127.0.0.1:8082/.well-known/schnick-schnack/service-info.json

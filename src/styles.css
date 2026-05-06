@@ -569,7 +569,7 @@ p {
 
 .logbook__entries {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   min-height: 0;
 }
@@ -639,23 +639,42 @@ p {
   z-index: 1;
 }
 
+.log-entry > span:not(.selected-badge) {
+  display: block;
+  max-width: calc(100% - 58px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .log-entry h3 {
-  margin-top: 7px;
-  font-size: 14px;
+  margin-top: 8px;
+  font-size: 13px;
   line-height: 1.15;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
+.log-entry__date {
+  display: block;
+  margin-top: 5px;
+  color: var(--quiet);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
 .log-entry p {
-  display: -webkit-box;
-  margin-top: 6px;
+  display: none;
+  margin-top: 5px;
   overflow: hidden;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.45;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
 }
 
 h2 {

@@ -101,6 +101,8 @@ test("logbook is prominent above modules", async ({ page }) => {
   await expect(entries.getByText("Portal online")).toBeVisible();
   await expect(entries.getByText("HUD Interface aktiviert")).toBeVisible();
   await expect(entries.getByText("Service Panels erweitert")).toBeVisible();
+  await expect(entries.getByText("GitLab freigeschaltet")).toBeVisible();
+  await expect(entries.getByText("06.05.2026").first()).toBeVisible();
   await expect(newsDetail.getByText("Das Portal ist der sichtbare Einstiegspunkt")).toBeVisible();
 
   const logbookBox = await logbook.boundingBox();
@@ -116,6 +118,22 @@ test("logbook is prominent above modules", async ({ page }) => {
   await page.waitForTimeout(420);
   await expect(logbook.getByLabel("HUD Interface aktiviert Details anzeigen")).toHaveAttribute("aria-selected", "true");
   await expect(newsDetail.getByText("Das Interface wurde von einer klassischen Landing Page")).toBeVisible();
+
+  await logbook.getByLabel("GitLab freigeschaltet Details anzeigen").click();
+  await expect(newsDetail.getByText("GitLab ist jetzt als aktiver Dienst")).toBeVisible();
+  await expect(newsDetail.getByText(/Log 004 \/ Development Hub \/ 06.05.2026/)).toBeVisible();
+});
+
+test("gitlab is an active module with public link", async ({ page }) => {
+  await page.goto("/");
+
+  const gitlab = page.getByLabel("GitLab Details anzeigen");
+  await expect(gitlab).toBeVisible();
+  await gitlab.click();
+
+  const detail = page.getByLabel("Modul Detail");
+  await expect(detail.getByRole("heading", { name: "GitLab" })).toBeVisible();
+  await expect(detail.getByRole("link", { name: /Öffnen/i })).toHaveAttribute("href", "https://gitlab.schnick-schnack.info");
 });
 
 test("brief hover pass does not steal the selected module", async ({ page }) => {

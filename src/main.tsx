@@ -14,7 +14,7 @@ import { createRoot } from "react-dom/client";
 import "./styles.css";
 
 type ServiceState = "online" | "degraded" | "offline" | "checking" | "planned";
-type ServiceCategory = "communication" | "identity" | "realtime" | "roadmap";
+type ServiceCategory = "communication" | "identity" | "realtime" | "development" | "roadmap";
 
 type PublicService = {
   id: string;
@@ -187,6 +187,7 @@ const logbookEntries = [
     id: "portal-online",
     title: "Portal online",
     meta: "Log 001 / Public Gateway",
+    date: "06.05.2026",
     teaser: "Das öffentliche Gateway bündelt Voice, Auth und Realtime in einer Statusfläche.",
     body: `Das Portal ist der sichtbare Einstiegspunkt für die Dienste auf schnick-schnack.info. Der wichtigste Architekturentscheid war, die öffentliche Ansicht strikt von internen Betriebsdetails zu trennen. Besucher sehen Namen, Status, Aktualisierung und Aktionen, aber keine Container, Ports, Datenbankadressen oder privaten Routings. Die Statusdaten entstehen serverseitig und werden als reduzierte Public-Health-Snapshots ausgeliefert. Der Browser bekommt dadurch nur die Information, die für Orientierung und Vertrauen sinnvoll ist. Voice wird als geschützter OpenVoice-Zugang geführt, Auth verweist auf die SSO-Ebene, und Realtime repräsentiert die Medienstrecke. Im Hintergrund laufen weitere Bausteine wie Postgres, Valkey, Prometheus, Grafana, Coturn und LiveKit, doch die Landing Page behandelt sie nicht als öffentliche Zielsysteme. Das ist Absicht: Infrastruktur unterstützt das Portal, sie wird aber nicht selbst zum Exponat. Der Health-Server aktualisiert regelmäßig und verteilt Snapshots über WebSocket. Wenn die Verbindung fehlt, fällt die Oberfläche auf Abfrage zurück. So bleibt das Display lebendig, ohne Nutzer mit technischen Fehlermeldungen zu belasten. Das erste Deployment wurde als Docker-Service auf dem Server bereitgestellt und lokal hinter Nginx angebunden. Die Domain kann über TLS terminieren, während die Anwendung selbst intern bleibt. Damit ist die Seite öffentlich schnell erreichbar, aber operativ sauber gekapselt. Dieser Stand ist die Basis für spätere Detail-APIs: Jeder Dienst kann künftig eigene öffentliche Metadaten liefern, während das Portal weiterhin entscheidet, welche Informationen wirklich auf die Brücke gehören. Auch das Deployment wurde reproduzierbar gehalten: Build, Containerstart, Healthcheck und GitHub-Push sind dokumentiert und geprüft. Änderungen können dadurch zügig veröffentlicht werden, ohne am Server manuell Dateien zu editieren oder Zustände zu erraten. Für Besucher entsteht ein ruhiger Einstieg, für Betreiber bleibt die Oberfläche kontrollierbar, testbar und erweiterbar. Der nächste Schritt wird sein, Logbuch und Servicekatalog aus Datenquellen zu speisen, damit Deployments, Wartungsfenster und neue Module ohne Frontend-Release erscheinen. Trotzdem bleibt der Sicherheitsfilter zentral: öffentlich ist nur, was bewusst freigegeben wurde. Diese Linie bleibt für spätere Integrationen verbindlich.`
   },
@@ -194,6 +195,7 @@ const logbookEntries = [
     id: "hud-interface",
     title: "HUD Interface aktiviert",
     meta: "Log 002 / Display System",
+    date: "06.05.2026",
     teaser: "Das Display wurde vom Portal zur Brückenkonsole mit animiertem HUD erweitert.",
     body: `Das Interface wurde von einer klassischen Landing Page zu einem Command Display umgebaut. Die Gestaltung bleibt dunkel, technisch und konzentriert, nutzt aber stärkere rote Energieakzente, Cyan-Kanten und ein feines Raster, damit die Oberfläche wie ein aktives Kontrollsystem wirkt. Die ToLuBo-Kennung rotiert nicht nur beim Laden, sondern sortiert sich regelmäßig neu. Dabei blenden die Segmente leicht aus, wabern, setzen sich wieder zusammen und verweilen anschließend lange genug, damit die Bewegung nicht nervös wirkt. Die Servicekarten bekamen schnelle Boot-Animationen, umlaufende Rahmen und kurze Lichtimpulse. Wichtig war, dass diese Effekte nicht gegen die Bedienbarkeit arbeiten. Hover, Fokus und Klick müssen unmittelbar reagieren; Animationen dürfen nie die Aktion blockieren. Deshalb laufen die Übergänge kurz, präzise und überwiegend transformbasiert. Der Hintergrund wurde nachjustiert: Statt eines dominanten Sweeps fahren nur noch gelegentlich kleine Lightcycle-Linien über das Raster. Sie geben dem Display Bewegung, ohne die Inhalte zu überstrahlen. Auch die Farbharmonie wurde geprüft. Rot markiert Energie, Aufmerksamkeit und Interaktion, während Teal und Cyan den technischen Grundton stabilisieren. Erfolgsstatus bleibt grün, Warnung bleibt warm, Fehler bleibt rot. Dadurch entsteht kein reines Alarmbild, sondern ein kontrolliertes Cockpit. Die Live-Statusfläche wurde als eigene HUD-Kachel gestaltet, mit Kanten, Sweep und klarer Verbindungsmeldung. Gleichzeitig respektiert die Oberfläche reduzierte Bewegung: Nutzer mit entsprechender Systemeinstellung bekommen keine Flip-, Waber- oder Laufanimationen. Das Ergebnis ist expressiver als ein Business-Dashboard, aber weiterhin scanbar. Die Seite soll Eindruck machen, ohne die Grundaufgabe zu verlieren: schnell erkennen, was verfügbar ist, und den passenden Dienst öffnen. Diese Balance war der Kern des Refactors. Die Komposition bleibt responsiv, hält Text innerhalb der Panels und vermeidet dekorative Elemente ohne Funktion. So fühlt sich das Portal wie ein Display an, nicht wie eine Effekt-Demo. Technisch bleiben die Animationen bewusst in CSS, damit React nur Zustände steuert. Das reduziert Re-Renders, hält den Code auch unter Last lesbar und macht spätere Theme-Varianten einfacher testbar.`
   },
@@ -201,8 +203,17 @@ const logbookEntries = [
     id: "service-panels",
     title: "Service Panels erweitert",
     meta: "Log 003 / Interaction Layer",
+    date: "06.05.2026",
     teaser: "Kacheln wurden zu Detailpanels mit vorbereiteter Action-Schicht und Refresh-Takt.",
     body: `Die Kacheln folgen jetzt einem wiederverwendbaren Interaktionsmodell: vorne steht eine kompakte Kurzinfo, in der Detailansicht entsteht ein größeres Panel mit Kontext, Messwerten und Aktionen. Dieses Muster gilt nicht nur für Dienste, sondern auch für News und spätere Logbuch-Einträge. Der Nutzer soll überall dasselbe Verhalten lernen: eine Karte zeigt den Teaser, die geöffnete Ansicht zeigt den eigentlichen Inhalt. Ursprünglich wuchs die Karte direkt im Grid. Das erzeugte kurzzeitig Layoutverschiebungen und konnte Scrollbars einblenden. Die aktuelle Richtung trennt Layout und Detailzustand sauberer. Das Grid bleibt stabil, während die Detailansicht als zentriertes HUD-Panel im sichtbaren Bereich erscheint. Dadurch kann die Animation größer und dramatischer sein, ohne über Ränder zu ragen oder die Seite zu verschieben. Jede Dienstkarte hat außerdem einen rückwärts laufenden Refresh-Balken. Er basiert auf dem letzten Health-Snapshot und zeigt, wie lange der aktuelle Zustand voraussichtlich noch gültig ist. Das ist nützlicher als ein statischer Zeitstempel, weil der Nutzer den Takt der Telemetrie direkt sieht. Auf der Rückseite stehen vorbereitete Detailinformationen, Status, Updatezeit und Reaktionszeit. Die Action-Zone enthält aktuell nur Öffnen, ist aber als Platz für spätere API-gelieferte Aktionen angelegt. Denkbar sind direkte Links zu Dashboards, Login-Flows, Raumstatus, Audit-Hinweisen oder Wartungsfenstern. Wichtig bleibt: Die Dienste liefern später öffentliche Metadaten, das Portal entscheidet über Darstellung und Sicherheitsfilter. Intern laufende Komponenten wie LiveKit, Coturn, Valkey, Postgres, Prometheus und Grafana können so Zustände beeinflussen, ohne ungefiltert sichtbar zu werden. Das Interaktionsmodell ist damit vorbereitet für mehr Inhalt, bleibt aber heute schon bedienbar. Tests prüfen nachweisbar Hover, Klick-Schließen, Countdown, Logbuchposition und Statusdarstellung. Das reduziert die Gefahr, dass visuelle Effekte die Nutzbarkeit beschädigen. Der Dialog-Layer ist bewusst zentral, begrenzt und intern scrollbar. So darf Text ausführlich werden, während die Seite selbst ruhig bleibt und keine temporären Browserleisten erzeugt. News nutzen dasselbe Muster: kurzer Teaser außen, technischer Langtext innen, später gespeist aus einem Feed mit Versionsstand und Autor.`
+  },
+  {
+    id: "gitlab-online",
+    title: "GitLab freigeschaltet",
+    meta: "Log 004 / Development Hub",
+    date: "06.05.2026",
+    teaser: "GitLab ist aus der Roadmap in die aktiven Module gewechselt.",
+    body: `GitLab ist jetzt als aktiver Dienst im Portal sichtbar und nicht mehr nur als geplantes Modul markiert. Damit bekommt die Entwicklungsplattform denselben öffentlichen Statuspfad wie Voice, Auth und Realtime: Die Landing Page prüft Erreichbarkeit, zeigt den Dienst als auswählbare Kachel und führt den Benutzer über die öffentliche Subdomain weiter. Inhaltlich verschiebt sich GitLab damit von einer bloßen Ankündigung zu einem produktiven Baustein der Umgebung. Der Dienst ist für Repositories, Issues, Projektorganisation und spätere CI/CD-Abläufe vorgesehen. Gerade deshalb bleibt die Darstellung bewusst knapp: Öffentlich sichtbar sind Name, Zweck, Verfügbarkeit und der Einstieg. Interne Runner, Registry-Routen, SSH-Ports, Datenbankbezüge oder Administrationsdetails gehören nicht auf die Startseite. Parallel greift auch für GitLab die neue Service-Info-Spezifikation. Sobald der Dienst den Endpunkt /.well-known/schnick-schnack/service-info.json bereitstellt, kann das Portal zusätzliche öffentliche Metadaten anzeigen. Denkbar sind Projektanzahl, offene Issues, Pipeline-Status, letzte Deployments, Runner-Verfügbarkeit oder Wartungshinweise. Diese Daten werden nicht hart im Frontend verdrahtet, sondern über die Aggregation der Landing Page abgefragt. Dadurch kann GitLab später eigenständig wachsen, ohne dass jedes neue Detail einen Portal-Release erzwingt. Wichtig ist außerdem die Trennung zwischen Betriebszustand und Detaildaten: Der Health-Check beantwortet, ob der Dienst erreichbar ist; die Service-Info-API beschreibt, was öffentlich über den Dienst gezeigt werden darf. So bleibt das Cockpit robust, auch wenn ein Dienst die Zusatz-API noch nicht implementiert hat. Für Besucher entsteht ein klarerer Eindruck: Die Entwicklungsplattform ist Teil des Systems, aber weiterhin sauber in die Sicherheitslinie des öffentlichen Displays eingebunden. Der nächste sinnvolle Schritt ist ein GitLab-spezifischer Info-Payload mit Projektmetriken, Pipeline-Übersicht und direkten Aktionen zu Gruppen oder Repositories.`
   }
 ];
 
@@ -570,6 +581,7 @@ function LogCard({
     >
       <span className="selected-badge">FOCUS</span>
       <span>{entry.meta}</span>
+      <time className="log-entry__date" dateTime={entry.date.split(".").reverse().join("-")}>{entry.date}</time>
       <h3>{entry.title}</h3>
       <p>{entry.teaser}</p>
     </article>
@@ -584,7 +596,7 @@ function LogDetail({ entry }: { entry: (typeof logbookEntries)[number] }) {
           <Activity size={24} strokeWidth={2} />
         </div>
         <div>
-          <span>{entry.meta}</span>
+          <span>{entry.meta} / {entry.date}</span>
           <h3 data-active-title>{entry.title}</h3>
         </div>
       </div>
