@@ -74,6 +74,21 @@ type ServiceSection = {
   body: string;
 };
 
+type ServiceFeedItem = {
+  id: string;
+  author: string;
+  text: string;
+  createdAt: string;
+  href?: string;
+};
+
+type ServiceFeed = {
+  id: string;
+  title: string;
+  href?: string;
+  items: ServiceFeedItem[];
+};
+
 type ServiceInfo = {
   schemaVersion: "1.0";
   serviceId: string;
@@ -83,6 +98,7 @@ type ServiceInfo = {
   charts?: ServiceChart[];
   actions?: ServiceAction[];
   sections?: ServiceSection[];
+  feeds?: ServiceFeed[];
 };
 
 type ServiceInfoResult = {
@@ -100,6 +116,14 @@ const HEALTH_INTERVAL_MS = Number.parseInt(process.env.HEALTH_INTERVAL_MS ?? "10
 const HOST = process.env.HOST ?? "0.0.0.0";
 const PORT = Number.parseInt(process.env.PORT ?? "8080", 10);
 const SERVICE_INFO_PATH = "/.well-known/schnick-schnack/service-info.json";
+const ROCKET_CHAT_URL = process.env.ROCKET_CHAT_URL ?? "https://slack.schnick-schnack.info";
+const ROCKET_CHAT_CHANNEL = process.env.ROCKET_CHAT_CHANNEL ?? "general";
+const ROCKET_CHAT_CHANNEL_URL =
+  process.env.ROCKET_CHAT_CHANNEL_URL ?? new URL(`/channel/${ROCKET_CHAT_CHANNEL}`, ROCKET_CHAT_URL).toString();
+const ROCKET_CHAT_MESSAGE_LIMIT = Math.min(
+  8,
+  Math.max(1, Number.parseInt(process.env.ROCKET_CHAT_MESSAGE_LIMIT ?? "5", 10) || 5)
+);
 
 function defaultInfoUrl(href: string | null): string | null {
   if (!href) {
@@ -217,7 +241,142 @@ function normalizeServiceInfo(target: HealthTarget, value: unknown): ServiceInfo
           .slice(0, 4)
       : undefined,
     actions: Array.isArray(data.actions) ? data.actions.slice(0, 8) : undefined,
-    sections: Array.isArray(data.sections) ? data.sections.slice(0, 6) : undefined
+    sections: Array.isArray(data.sections) ? data.sections.slice(0, 6) : undefined,
+    feeds: Array.isArray(data.feeds)
+      ? data.feeds
+          .filter((feed) => Array.isArray(feed.items))
+          .map((feed) => ({
+            ...feed,
+            items: feed.items.slice(0, 8)
+          }))
+          .slice(0, 4)
+      : undefined
+  };
+}
+
+function sanitizeFeedText(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.replace(/\s+/g, " ").trim().slice(0, 220);
+}
+
+function normalizeRocketChatMessage(value: unknown): ServiceFeedItem | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const message = value as {
+    _id?: unknown;
+    msg?: unknown;
+    ts?: unknown;
+    u?: {
+      name?: unknown;
+      username?: unknown;
+    };
+  };
+  const text = sanitizeFeedText(message.msg);
+  const id = typeof message._id === "string" ? message._id : "";
+  const createdAt = typeof message.ts === "string" ? message.ts : new Date().toISOString();
+  const author =
+    typeof message.u?.name === "string"
+      ? message.u.name
+      : typeof message.u?.username === "string"
+        ? message.u.username
+        : "channel";
+
+  if (!id || !text) {
+    return null;
+  }
+
+  return {
+    id,
+    author: sanitizeFeedText(author).slice(0, 48) || "channel",
+    text,
+    createdAt,
+    href: ROCKET_CHAT_CHANNEL_URL
+  };
+}
+
+async function fetchRocketChatFeed(): Promise<ServiceFeed | null> {
+  const userId = process.env.ROCKET_CHAT_USER_ID;
+  const authToken = process.env.ROCKET_CHAT_AUTH_TOKEN;
+
+  if (!userId || !authToken) {
+    return null;
+  }
+
+  const url = new URL("/api/v1/channels.messages", ROCKET_CHAT_URL);
+  url.searchParams.set("roomName", ROCKET_CHAT_CHANNEL);
+  url.searchParams.set("count", String(ROCKET_CHAT_MESSAGE_LIMIT));
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), INFO_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        accept: "application/json",
+        "X-Auth-Token": authToken,
+        "X-User-Id": userId
+      },
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = (await response.json()) as { messages?: unknown[] };
+    const items = Array.isArray(payload.messages)
+      ? payload.messages.map(normalizeRocketChatMessage).filter((item): item is ServiceFeedItem => item !== null)
+      : [];
+
+    if (items.length === 0) {
+      return null;
+    }
+
+    return {
+      id: "rocket-chat-general",
+      title: `#${ROCKET_CHAT_CHANNEL}`,
+      href: ROCKET_CHAT_CHANNEL_URL,
+      items
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function mergeServiceFeeds(target: HealthTarget, result: ServiceInfoResult): Promise<ServiceInfoResult> {
+  if (target.id !== "slack") {
+    return result;
+  }
+
+  const feed = await fetchRocketChatFeed();
+  if (!feed) {
+    return result;
+  }
+
+  const baseData: ServiceInfo =
+    result.data ?? {
+      schemaVersion: "1.0",
+      serviceId: target.id,
+      generatedAt: new Date().toISOString(),
+      summary: "Slack/Rocket.Chat Channel-Bridge liefert freigegebene öffentliche Nachrichten."
+    };
+
+  return {
+    ...result,
+    status: "available",
+    message: result.data ? result.message : "Service-Info über Channel-Bridge verfügbar.",
+    data: {
+      ...baseData,
+      generatedAt: new Date().toISOString(),
+      feeds: [feed, ...(baseData.feeds ?? []).filter((item) => item.id !== feed.id)].slice(0, 4)
+    }
   };
 }
 
@@ -256,7 +415,7 @@ async function fetchServiceInfo(target: HealthTarget): Promise<ServiceInfoResult
     const responseMs = Math.round(performance.now() - startedAt);
 
     if ([401, 403, 404].includes(response.status)) {
-      return {
+      return mergeServiceFeeds(target, {
         serviceId: target.id,
         status: "unsupported",
         message:
@@ -266,7 +425,7 @@ async function fetchServiceInfo(target: HealthTarget): Promise<ServiceInfoResult
         updatedAt: new Date().toISOString(),
         responseMs,
         data: null
-      };
+      });
     }
 
     if (!response.ok) {
@@ -292,23 +451,23 @@ async function fetchServiceInfo(target: HealthTarget): Promise<ServiceInfoResult
       };
     }
 
-    return {
+    return mergeServiceFeeds(target, {
       serviceId: target.id,
       status: "available",
       message: "Service-Info verfügbar.",
       updatedAt: new Date().toISOString(),
       responseMs,
       data: serviceInfo
-    };
+    });
   } catch {
-    return {
+    return mergeServiceFeeds(target, {
       serviceId: target.id,
       status: "unsupported",
       message: "Service-Info-API nicht erreichbar oder noch nicht implementiert.",
       updatedAt: new Date().toISOString(),
       responseMs: null,
       data: null
-    };
+    });
   } finally {
     clearTimeout(timeout);
   }
@@ -482,6 +641,22 @@ const openApiDocument = {
                           ]
                         }
                       ],
+                      feeds: [
+                        {
+                          id: "status-channel",
+                          title: "#status",
+                          href: "https://slack.schnick-schnack.info/channel/status",
+                          items: [
+                            {
+                              id: "msg-001",
+                              author: "ops",
+                              text: "OpenVoice Kapazitaet stabil, keine Wartung aktiv.",
+                              createdAt: "2026-05-06T12:10:00.000Z",
+                              href: "https://slack.schnick-schnack.info/channel/status"
+                            }
+                          ]
+                        }
+                      ],
                       actions: [
                         { id: "open", label: "Oeffnen", href: "https://voice.schnick-schnack.info", kind: "primary" }
                       ]
@@ -508,7 +683,8 @@ const openApiDocument = {
           metrics: { type: "array", items: { $ref: "#/components/schemas/ServiceMetric" } },
           charts: { type: "array", items: { $ref: "#/components/schemas/ServiceChart" } },
           actions: { type: "array", items: { $ref: "#/components/schemas/ServiceAction" } },
-          sections: { type: "array", items: { $ref: "#/components/schemas/ServiceSection" } }
+          sections: { type: "array", items: { $ref: "#/components/schemas/ServiceSection" } },
+          feeds: { type: "array", items: { $ref: "#/components/schemas/ServiceFeed" } }
         },
         additionalProperties: true
       },
@@ -563,6 +739,29 @@ const openApiDocument = {
           id: { type: "string" },
           title: { type: "string" },
           body: { type: "string" }
+        },
+        additionalProperties: true
+      },
+      ServiceFeed: {
+        type: "object",
+        required: ["id", "title", "items"],
+        properties: {
+          id: { type: "string" },
+          title: { type: "string", examples: ["#general"] },
+          href: { type: "string", format: "uri" },
+          items: { type: "array", items: { $ref: "#/components/schemas/ServiceFeedItem" } }
+        },
+        additionalProperties: true
+      },
+      ServiceFeedItem: {
+        type: "object",
+        required: ["id", "author", "text", "createdAt"],
+        properties: {
+          id: { type: "string" },
+          author: { type: "string" },
+          text: { type: "string", maxLength: 220 },
+          createdAt: { type: "string", format: "date-time" },
+          href: { type: "string", format: "uri" }
         },
         additionalProperties: true
       }

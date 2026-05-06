@@ -15,3 +15,6 @@ services:
       INFO_VOICE_URL: http://127.0.0.1:3000/.well-known/schnick-schnack/service-info.json
       INFO_SLACK_URL: http://127.0.0.1:3010/.well-known/schnick-schnack/service-info.json
       INFO_GITLAB_URL: http://127.0.0.1:8082/.well-known/schnick-schnack/service-info.json
+      ROCKET_CHAT_URL: http://127.0.0.1:3010/
+      ROCKET_CHAT_CHANNEL: general
+      ROCKET_CHAT_CHANNEL_URL: https://slack.schnick-schnack.info/channel/general

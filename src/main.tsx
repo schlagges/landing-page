@@ -61,6 +61,21 @@ type ServiceAction = {
   kind?: "primary" | "secondary" | "danger";
 };
 
+type ServiceFeedItem = {
+  id: string;
+  author: string;
+  text: string;
+  createdAt: string;
+  href?: string;
+};
+
+type ServiceFeed = {
+  id: string;
+  title: string;
+  href?: string;
+  items: ServiceFeedItem[];
+};
+
 type ServiceInfo = {
   schemaVersion: "1.0";
   serviceId: string;
@@ -70,6 +85,7 @@ type ServiceInfo = {
   charts?: ServiceChart[];
   actions?: ServiceAction[];
   sections?: Array<{ id: string; title: string; body: string }>;
+  feeds?: ServiceFeed[];
 };
 
 type ServiceInfoResult = {
@@ -466,15 +482,43 @@ function ServiceInfoSections({ sections }: { sections: NonNullable<ServiceInfo["
   );
 }
 
-function SlackChannelPreview() {
-  const channelUrl = "https://slack.schnick-schnack.info/channel/general";
+function formatFeedTime(value: string): string {
+  return new Intl.DateTimeFormat("de-DE", {
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
+const fallbackSlackFeed: ServiceFeed = {
+  id: "fallback-general",
+  title: "#general",
+  href: "https://slack.schnick-schnack.info/channel/general",
+  items: [
+    {
+      id: "fallback-system",
+      author: "system",
+      createdAt: new Date().toISOString(),
+      text: "Portal bereit: Health, News und Service-Info laufen über die öffentliche Cockpit-Schicht."
+    },
+    {
+      id: "fallback-ops",
+      author: "ops",
+      createdAt: new Date().toISOString(),
+      text: "Channel-Anbindung vorbereitet. Echte Nachrichten erscheinen hier, sobald der Bot-Token serverseitig gesetzt ist."
+    }
+  ]
+};
+
+function SlackChannelPreview({ feed }: { feed?: ServiceFeed }) {
+  const activeFeed = feed ?? fallbackSlackFeed;
+  const channelUrl = activeFeed.href ?? fallbackSlackFeed.href;
 
   return (
     <section className="slack-channel" aria-label="Slack Channel Vorschau">
       <div className="slack-channel__header">
         <div>
           <span>Channel Bridge</span>
-          <strong>#general</strong>
+          <strong>{activeFeed.title}</strong>
         </div>
         <a href={channelUrl}>
           Channel öffnen
@@ -482,14 +526,15 @@ function SlackChannelPreview() {
         </a>
       </div>
       <div className="slack-channel__stream">
-        <article>
-          <span>system</span>
-          <p>Portal bereit: Health, News und Service-Info laufen über die öffentliche Cockpit-Schicht.</p>
-        </article>
-        <article>
-          <span>ops</span>
-          <p>Channel-Anbindung vorbereitet. Echte Nachrichten können später über die Slack/Rocket.Chat-API gespiegelt werden.</p>
-        </article>
+        {activeFeed.items.slice(0, 5).map((item) => (
+          <article key={item.id}>
+            <span>
+              {item.author}
+              <time dateTime={item.createdAt}>{formatFeedTime(item.createdAt)}</time>
+            </span>
+            <p>{item.text}</p>
+          </article>
+        ))}
       </div>
     </section>
   );
@@ -682,6 +727,7 @@ function ServiceDetail({
   const infoStatus = serviceInfo?.status ?? service.infoState;
   const infoData = serviceInfo?.data ?? null;
   const serviceActions = infoData?.actions?.length ? infoData.actions : null;
+  const slackFeed = service.id === "slack" ? infoData?.feeds?.[0] : undefined;
 
   return (
     <article className="detail-panel detail-panel--service" aria-label="Modul Detail" data-active-detail key={service.id}>
@@ -709,7 +755,7 @@ function ServiceDetail({
         {infoData?.metrics?.length ? <ServiceInfoMetrics metrics={infoData.metrics} /> : null}
         {infoData?.charts?.length ? <ServiceInfoCharts charts={infoData.charts} /> : null}
         {infoData?.sections?.length ? <ServiceInfoSections sections={infoData.sections} /> : null}
-        {service.id === "slack" ? <SlackChannelPreview /> : null}
+        {service.id === "slack" ? <SlackChannelPreview feed={slackFeed} /> : null}
         {!infoData ? (
           <p className="service-info-empty">
             {serviceInfo?.message ?? "Service-Info-API wird geprüft. Dienste können den öffentlichen Info-Endpunkt später implementieren."}

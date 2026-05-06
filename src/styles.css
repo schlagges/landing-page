@@ -1141,11 +1141,21 @@ h2 {
 
 .slack-channel__header span,
 .slack-channel__stream span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   color: var(--quiet);
   font-size: 10px;
   font-weight: 850;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.slack-channel__stream time {
+  color: rgba(var(--accent), 0.72);
+  font-size: 9px;
+  letter-spacing: 0;
 }
 
 .slack-channel__header strong {

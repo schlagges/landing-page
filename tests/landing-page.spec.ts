@@ -35,6 +35,8 @@ test("service info OpenAPI and aggregation endpoints are available", async ({ pa
   const openApi = await openApiResponse.json();
   expect(openApi.openapi).toBe("3.1.0");
   expect(openApi.paths["/.well-known/schnick-schnack/service-info.json"]).toBeTruthy();
+  expect(openApi.components.schemas.ServiceFeed).toBeTruthy();
+  expect(openApi.components.schemas.ServiceInfo.properties.feeds).toBeTruthy();
 
   const serviceInfoResponse = await page.request.get("/api/service-info");
   expect(serviceInfoResponse.ok()).toBe(true);
