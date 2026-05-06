@@ -58,6 +58,15 @@ const iconMap = {
   shield: ShieldCheck
 };
 
+const wordSegments = ["Lu", "To", "Bo"] as const;
+
+function shuffleSegments(): string[] {
+  return [...wordSegments]
+    .map((value) => ({ value, order: Math.random() }))
+    .sort((left, right) => left.order - right.order)
+    .map((item) => item.value);
+}
+
 function formatTime(value: string | null): string {
   if (!value) {
     return "Noch nicht geprüft";
@@ -147,32 +156,48 @@ function ServiceCard({ service }: { service: PublicService }) {
 
   return (
     <article className="service-card">
-      <div className="service-card__topline">
-        <div className="service-icon" aria-hidden="true">
-          <Icon size={24} strokeWidth={2} />
+      <div className="service-card__shell">
+        <div className="service-card__topline">
+          <div className="service-icon" aria-hidden="true">
+            <Icon size={24} strokeWidth={2} />
+          </div>
+          <StatusPill state={service.state} />
         </div>
-        <StatusPill state={service.state} />
+        <div>
+          <h3>{service.name}</h3>
+          <p>{service.description}</p>
+        </div>
+        <div className="service-card__meta">
+          <span>
+            <Clock3 size={15} aria-hidden="true" />
+            {formatTime(service.updatedAt)}
+          </span>
+          {service.responseMs !== null ? <span>{service.responseMs} ms</span> : <span>{service.message}</span>}
+        </div>
+        {service.href ? (
+          <a className="service-card__link" href={service.href}>
+            Öffnen
+            <ArrowUpRight size={17} aria-hidden="true" />
+          </a>
+        ) : (
+          <span className="service-card__disabled">Noch nicht verfügbar</span>
+        )}
       </div>
-      <div>
-        <h3>{service.name}</h3>
-        <p>{service.description}</p>
-      </div>
-      <div className="service-card__meta">
-        <span>
-          <Clock3 size={15} aria-hidden="true" />
-          {formatTime(service.updatedAt)}
-        </span>
-        {service.responseMs !== null ? <span>{service.responseMs} ms</span> : <span>{service.message}</span>}
-      </div>
-      {service.href ? (
-        <a className="service-card__link" href={service.href}>
-          Öffnen
-          <ArrowUpRight size={17} aria-hidden="true" />
-        </a>
-      ) : (
-        <span className="service-card__disabled">Noch nicht verfügbar</span>
-      )}
     </article>
+  );
+}
+
+function Wordmark() {
+  const segments = useMemo(() => shuffleSegments(), []);
+
+  return (
+    <div className="wordmark" aria-label={segments.join("")}>
+      {segments.map((segment, index) => (
+        <span key={`${segment}-${index}`} style={{ "--segment-index": index } as React.CSSProperties}>
+          {segment}
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -181,6 +206,7 @@ function App() {
   const services = snapshot?.services ?? [];
   const activeServices = services.filter((service) => service.state !== "planned");
   const plannedServices = services.filter((service) => service.state === "planned");
+  const visibleServices = [...activeServices, ...plannedServices];
 
   const onlineCount = useMemo(
     () => activeServices.filter((service) => service.state === "online").length,
@@ -193,12 +219,13 @@ function App() {
         <div className="hero__content">
           <div className="eyebrow">
             <Activity size={16} aria-hidden="true" />
-            Öffentliches Diensteportal
+            COMMAND DISPLAY / PUBLIC SERVICES
           </div>
-          <h1 id="page-title">schnick-schnack.info</h1>
+          <p className="domain-label" id="page-title">schnick-schnack.info</p>
+          <Wordmark />
           <p>
-            Ein zentraler Einstieg zu den verfügbaren Diensten. Der Live-Status wird laufend
-            aktualisiert und zeigt nur öffentliche Verfügbarkeitsinformationen.
+            Systemzugriff auf verfügbare Dienste. Live-Status aktiv, öffentliche Telemetrie
+            reduziert auf Verfügbarkeit.
           </p>
         </div>
         <aside className="status-panel" aria-label="Gesamtstatus">
@@ -221,36 +248,22 @@ function App() {
       <section className="section-block" aria-labelledby="services-title">
         <div className="section-heading">
           <div>
-            <h2 id="services-title">Verfügbare Dienste</h2>
-            <p>Direkte Einstiege zu den öffentlichen Anwendungen.</p>
+            <h2 id="services-title">Module</h2>
+            <p>Schnelle Einstiege, klickbereit während jeder Animation.</p>
           </div>
         </div>
 
         <div className="service-grid">
           {services.length > 0 ? (
-            activeServices.map((service) => <ServiceCard key={service.id} service={service} />)
+            visibleServices.map((service) => <ServiceCard key={service.id} service={service} />)
           ) : (
             <>
               <div className="skeleton" />
               <div className="skeleton" />
               <div className="skeleton" />
+              <div className="skeleton" />
             </>
           )}
-        </div>
-      </section>
-
-      <section className="section-block section-block--split" aria-labelledby="roadmap-title">
-        <div>
-          <h2 id="roadmap-title">Als Nächstes</h2>
-          <p>
-            Weitere Dienste können ergänzt werden, sobald sie öffentlich erreichbar und für Besucher
-            relevant sind.
-          </p>
-        </div>
-        <div className="roadmap-list">
-          {plannedServices.map((service) => (
-            <ServiceCard key={service.id} service={service} />
-          ))}
         </div>
       </section>
     </main>
