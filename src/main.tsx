@@ -39,6 +39,7 @@ type SocketState = "connecting" | "live" | "fallback";
 const HEALTH_REFRESH_MS = 10000;
 const IDLE_ROTATION_MS = 6500;
 const POINTER_IDLE_MS = 4800;
+const HOVER_INTENT_MS = 360;
 const STORAGE_KEY = "schnick-schnack.theme";
 const DEFAULT_THEME = "crimson-command";
 const THEMES = [
@@ -46,7 +47,10 @@ const THEMES = [
   { id: "neon-ice", label: "Neon Ice", colors: ["#8be1ff", "#e6faff"] },
   { id: "violet-warp", label: "Violet Warp", colors: ["#b770ff", "#ff56d3"] },
   { id: "amber-terminal", label: "Amber Terminal", colors: ["#ffc75c", "#ff5f52"] },
-  { id: "bio-matrix", label: "Bio Matrix", colors: ["#61ff8b", "#d5ff63"] }
+  { id: "bio-matrix", label: "Bio Matrix", colors: ["#61ff8b", "#d5ff63"] },
+  { id: "solar-flare", label: "Solar Flare", colors: ["#ffe27a", "#ff3d2e"] },
+  { id: "deep-ocean", label: "Deep Ocean", colors: ["#3fe8ff", "#3264ff"] },
+  { id: "ghost-glass", label: "Ghost Glass", colors: ["#f7fbff", "#8aa7ff"] }
 ] as const;
 
 type ThemeId = (typeof THEMES)[number]["id"];
@@ -239,6 +243,29 @@ function StatusPill({ state }: { state: ServiceState }) {
   return <span className={`status-pill status-${state}`}>{stateLabels[state]}</span>;
 }
 
+function useHoverIntent(onIntent: () => void) {
+  const timer = useRef<number | null>(null);
+
+  const clearIntent = () => {
+    if (timer.current !== null) {
+      window.clearTimeout(timer.current);
+      timer.current = null;
+    }
+  };
+
+  const scheduleIntent = () => {
+    clearIntent();
+    timer.current = window.setTimeout(() => {
+      timer.current = null;
+      onIntent();
+    }, HOVER_INTENT_MS);
+  };
+
+  useEffect(() => clearIntent, []);
+
+  return { clearIntent, scheduleIntent };
+}
+
 function RefreshCountdown({ generatedAt }: { generatedAt: string | null }) {
   const [now, setNow] = useState(() => Date.now());
 
@@ -278,6 +305,7 @@ function ServiceCard({
 }) {
   const Icon = iconMap[service.icon];
   const cardClassName = `service-card${isActive ? " service-card--active" : ""}`;
+  const { clearIntent, scheduleIntent } = useHoverIntent(onOpen);
 
   return (
     <article
@@ -285,7 +313,8 @@ function ServiceCard({
       data-selectable-card
       aria-selected={isActive}
       onClick={onOpen}
-      onMouseEnter={onOpen}
+      onMouseEnter={scheduleIntent}
+      onMouseLeave={clearIntent}
       onFocus={onOpen}
       tabIndex={0}
       aria-label={`${service.name} Details anzeigen`}
@@ -393,6 +422,8 @@ function LogCard({
   isActive: boolean;
   onOpen: () => void;
 }) {
+  const { clearIntent, scheduleIntent } = useHoverIntent(onOpen);
+
   return (
     <article
       className={`log-entry${isActive ? " log-entry--active is-selected" : ""}`}
@@ -400,7 +431,8 @@ function LogCard({
       aria-selected={isActive}
       tabIndex={0}
       aria-label={`${entry.title} Details anzeigen`}
-      onMouseEnter={onOpen}
+      onMouseEnter={scheduleIntent}
+      onMouseLeave={clearIntent}
       onFocus={onOpen}
       onClick={onOpen}
     >

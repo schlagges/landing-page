@@ -22,6 +22,7 @@ test("service card updates the fixed module detail panel on hover", async ({ pag
   expect(detailBox!.width).toBeGreaterThan(initialBox!.width * 1.5);
 
   await page.getByLabel("Auth / SSO Details anzeigen").hover();
+  await page.waitForTimeout(420);
   await expect(detail.getByRole("heading", { name: "Auth / SSO" })).toBeVisible();
   await expect(page.getByLabel("Auth / SSO Details anzeigen")).toHaveAttribute("aria-selected", "true");
   await expect(card).toHaveAttribute("aria-selected", "false");
@@ -93,8 +94,28 @@ test("logbook is prominent above modules", async ({ page }) => {
   await expect(newsDetail.getByText("Das Portal ist der sichtbare Einstiegspunkt")).toBeVisible();
 
   await logbook.getByLabel("HUD Interface aktiviert Details anzeigen").hover();
+  await page.waitForTimeout(420);
   await expect(logbook.getByLabel("HUD Interface aktiviert Details anzeigen")).toHaveAttribute("aria-selected", "true");
   await expect(newsDetail.getByText("Das Interface wurde von einer klassischen Landing Page")).toBeVisible();
+});
+
+test("brief hover pass does not steal the selected module", async ({ page }) => {
+  await page.goto("/");
+
+  const voice = page.getByLabel("Voice Details anzeigen");
+  const auth = page.getByLabel("Auth / SSO Details anzeigen");
+  const detail = page.getByLabel("Modul Detail");
+
+  await voice.click();
+  await expect(detail.getByRole("heading", { name: "Voice" })).toBeVisible();
+
+  await auth.hover();
+  await page.waitForTimeout(120);
+  await page.mouse.move(1000, 760);
+
+  await expect(detail.getByRole("heading", { name: "Voice" })).toBeVisible();
+  await expect(voice).toHaveAttribute("aria-selected", "true");
+  await expect(auth).toHaveAttribute("aria-selected", "false");
 });
 
 test("desktop start screen does not require page scrolling", async ({ page }) => {
@@ -139,4 +160,17 @@ test("theme dock switches themes and persists selection", async ({ page }) => {
 
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "neon-ice");
+});
+
+test("theme dock is vertical on desktop and includes extended themes", async ({ page }) => {
+  await page.goto("/");
+
+  const dock = page.getByLabel("Theme Auswahl");
+  await expect(dock.getByRole("button", { name: "Theme Solar Flare aktivieren" })).toBeVisible();
+  await expect(dock.getByRole("button", { name: "Theme Deep Ocean aktivieren" })).toBeVisible();
+  await expect(dock.getByRole("button", { name: "Theme Ghost Glass aktivieren" })).toBeVisible();
+
+  const dockBox = await dock.boundingBox();
+  expect(dockBox).not.toBeNull();
+  expect(dockBox!.height).toBeGreaterThan(dockBox!.width * 1.5);
 });
