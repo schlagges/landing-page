@@ -35,6 +35,7 @@ type HealthSnapshot = {
 };
 
 type SocketState = "connecting" | "live" | "fallback";
+const HEALTH_REFRESH_MS = 10000;
 
 const stateLabels: Record<ServiceState, string> = {
   checking: "Prüfung",
@@ -163,7 +164,33 @@ function StatusPill({ state }: { state: ServiceState }) {
   return <span className={`status-pill status-${state}`}>{stateLabels[state]}</span>;
 }
 
-function ServiceCard({ service }: { service: PublicService }) {
+function RefreshCountdown({ generatedAt }: { generatedAt: string | null }) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 200);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const elapsed = generatedAt ? Math.max(0, now - new Date(generatedAt).getTime()) : HEALTH_REFRESH_MS;
+  const remaining = Math.max(0, HEALTH_REFRESH_MS - elapsed);
+  const progress = Math.max(0, Math.min(1, remaining / HEALTH_REFRESH_MS));
+  const seconds = Math.ceil(remaining / 1000);
+
+  return (
+    <div className="refresh-countdown" aria-label={`Nächster Refresh in ${seconds} Sekunden`}>
+      <div className="refresh-countdown__label">
+        <span>Next refresh</span>
+        <strong>{seconds}s</strong>
+      </div>
+      <div className="refresh-countdown__track">
+        <span style={{ "--refresh-progress": progress } as React.CSSProperties} />
+      </div>
+    </div>
+  );
+}
+
+function ServiceCard({ service, generatedAt }: { service: PublicService; generatedAt: string | null }) {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const Icon = iconMap[service.icon];
   const cardClassName = `service-card${isDetailOpen ? " service-card--detail" : ""}`;
@@ -210,6 +237,7 @@ function ServiceCard({ service }: { service: PublicService }) {
             </span>
             {service.responseMs !== null ? <span>{service.responseMs} ms</span> : <span>{service.message}</span>}
           </div>
+          <RefreshCountdown generatedAt={generatedAt} />
         </div>
 
         <div className="service-card__face service-card__face--back" aria-hidden={!isDetailOpen}>
@@ -228,6 +256,7 @@ function ServiceCard({ service }: { service: PublicService }) {
             <span>Update: {formatTime(service.updatedAt)}</span>
             <span>{service.responseMs !== null ? `Antwort: ${service.responseMs} ms` : service.message}</span>
           </div>
+          <RefreshCountdown generatedAt={generatedAt} />
           <div className="service-actions" aria-label={`${service.name} Aktionen`}>
             {service.href ? (
               <a
@@ -339,7 +368,9 @@ function App() {
 
         <div className="service-grid">
           {services.length > 0 ? (
-            visibleServices.map((service) => <ServiceCard key={service.id} service={service} />)
+            visibleServices.map((service) => (
+              <ServiceCard key={service.id} service={service} generatedAt={snapshot?.generatedAt ?? null} />
+            ))
           ) : (
             <>
               <div className="skeleton" />

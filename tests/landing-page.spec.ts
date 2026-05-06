@@ -4,16 +4,38 @@ test("service card opens details on hover and closes on mouse leave", async ({ p
   await page.goto("/");
 
   const card = page.getByLabel("Voice Details anzeigen");
+  const shell = card.locator(".service-card__shell");
   await expect(card).toBeVisible();
   await expect(card.getByText("Service Detail")).toBeHidden();
+  const initialBox = await shell.boundingBox();
+  expect(initialBox).not.toBeNull();
 
   await card.hover();
   await expect(card).toHaveClass(/service-card--detail/);
   await expect(card.getByText("Service Detail")).toBeVisible();
   await expect(card.getByRole("link", { name: /Öffnen/i })).toBeVisible();
+  const detailBox = await shell.boundingBox();
+  expect(detailBox).not.toBeNull();
+  expect(detailBox!.width).toBeGreaterThan(initialBox!.width * 1.5);
+  expect(detailBox!.height).toBeGreaterThan(initialBox!.height * 1.5);
 
   await page.mouse.move(20, 20);
   await expect(card).not.toHaveClass(/service-card--detail/);
+});
+
+test("service cards show a reverse refresh countdown", async ({ page }) => {
+  await page.goto("/");
+
+  const card = page.getByLabel("Voice Details anzeigen");
+  const countdown = card.locator(".service-card__face--front .refresh-countdown");
+  const progress = card.locator(".service-card__face--front .refresh-countdown__track span");
+  await expect(countdown).toBeVisible();
+
+  const initialWidth = await progress.evaluate((element) => element.getBoundingClientRect().width);
+  await page.waitForTimeout(650);
+  const laterWidth = await progress.evaluate((element) => element.getBoundingClientRect().width);
+
+  expect(laterWidth).toBeLessThan(initialWidth);
 });
 
 test("wordmark reorders after the hold interval", async ({ page }) => {
