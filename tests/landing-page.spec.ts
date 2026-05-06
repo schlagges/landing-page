@@ -6,26 +6,27 @@ test("service card opens details on hover and closes on mouse leave", async ({ p
   const card = page.getByLabel("Voice Details anzeigen");
   const shell = card.locator(".service-card__shell");
   await expect(card).toBeVisible();
-  await expect(card.getByText("Service Detail")).toBeHidden();
+  await expect(page.getByLabel("Detailansicht")).toBeHidden();
   const initialBox = await shell.boundingBox();
   expect(initialBox).not.toBeNull();
 
   await card.hover();
-  await expect(card).toHaveClass(/service-card--detail/);
-  await expect(card.getByText("Service Detail")).toBeVisible();
-  await expect(card.getByRole("link", { name: /Öffnen/i })).toBeVisible();
-  const detailBox = await shell.boundingBox();
+  const dialog = page.getByLabel("Detailansicht");
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText("Service Detail")).toBeVisible();
+  await expect(dialog.getByRole("link", { name: /Öffnen/i })).toBeVisible();
+  const detailBox = await dialog.boundingBox();
   expect(detailBox).not.toBeNull();
   expect(detailBox!.width).toBeGreaterThan(initialBox!.width * 1.5);
   expect(detailBox!.height).toBeGreaterThan(initialBox!.height * 1.5);
 
-  await page.mouse.move(20, 20);
-  await expect(card).not.toHaveClass(/service-card--detail/);
+  await dialog.click({ position: { x: 24, y: 24 } });
+  await expect(dialog).toBeHidden();
 
-  await card.hover();
-  await expect(card).toHaveClass(/service-card--detail/);
-  await card.click({ position: { x: 24, y: 24 } });
-  await expect(card).not.toHaveClass(/service-card--detail/);
+  await card.click();
+  await expect(dialog).toBeVisible();
+  await dialog.click({ position: { x: 24, y: 24 } });
+  await expect(dialog).toBeHidden();
 });
 
 test("service cards show a reverse refresh countdown", async ({ page }) => {
@@ -86,4 +87,9 @@ test("logbook is prominent above modules", async ({ page }) => {
   expect(logbookBox).not.toBeNull();
   expect(modulesBox).not.toBeNull();
   expect(logbookBox!.y).toBeLessThan(modulesBox!.y);
+
+  await logbook.getByLabel("Portal online Details anzeigen").hover();
+  const dialog = page.getByLabel("Detailansicht");
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText("Das Portal ist der sichtbare Einstiegspunkt")).toBeVisible();
 });
