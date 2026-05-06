@@ -27,12 +27,63 @@ type PublicService = {
   message: string;
   updatedAt: string | null;
   responseMs: number | null;
+  infoState: ServiceInfoState;
+  infoUpdatedAt: string | null;
 };
 
 type HealthSnapshot = {
   generatedAt: string;
   overall: Exclude<ServiceState, "planned">;
   services: PublicService[];
+};
+
+type ServiceInfoState = "checking" | "available" | "unsupported" | "error" | "planned";
+
+type ServiceMetric = {
+  id: string;
+  label: string;
+  value: string | number | boolean;
+  unit?: string;
+  tone?: "neutral" | "success" | "warning" | "danger" | "info";
+};
+
+type ServiceChart = {
+  id: string;
+  title: string;
+  unit?: string;
+  points: Array<{ label: string; value: number }>;
+};
+
+type ServiceAction = {
+  id: string;
+  label: string;
+  href: string;
+  kind?: "primary" | "secondary" | "danger";
+};
+
+type ServiceInfo = {
+  schemaVersion: "1.0";
+  serviceId: string;
+  generatedAt: string;
+  summary?: string;
+  metrics?: ServiceMetric[];
+  charts?: ServiceChart[];
+  actions?: ServiceAction[];
+  sections?: Array<{ id: string; title: string; body: string }>;
+};
+
+type ServiceInfoResult = {
+  serviceId: string;
+  status: ServiceInfoState;
+  message: string;
+  updatedAt: string | null;
+  responseMs: number | null;
+  data: ServiceInfo | null;
+};
+
+type ServiceInfoSnapshot = {
+  generatedAt: string;
+  services: ServiceInfoResult[];
 };
 
 type SocketState = "connecting" | "live" | "fallback";
@@ -71,6 +122,14 @@ const overallLabels: Record<HealthSnapshot["overall"], string> = {
   degraded: "Teilweise verfügbar",
   offline: "Störung erkannt",
   online: "Alle öffentlichen Dienste erreichbar"
+};
+
+const infoStateLabels: Record<ServiceInfoState, string> = {
+  available: "API aktiv",
+  checking: "API-Prüfung",
+  error: "API Fehler",
+  planned: "Geplant",
+  unsupported: "API offen"
 };
 
 const iconMap = {
@@ -239,6 +298,41 @@ function useHealth(): { snapshot: HealthSnapshot | null; socketState: SocketStat
   return { snapshot, socketState };
 }
 
+function useServiceInfo(): ServiceInfoSnapshot | null {
+  const [snapshot, setSnapshot] = useState<ServiceInfoSnapshot | null>(null);
+
+  useEffect(() => {
+    let closed = false;
+
+    async function loadServiceInfo() {
+      try {
+        const response = await fetch("/api/service-info", { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error("Service info unavailable");
+        }
+        const data = (await response.json()) as ServiceInfoSnapshot;
+        if (!closed) {
+          setSnapshot(data);
+        }
+      } catch {
+        if (!closed) {
+          setSnapshot(null);
+        }
+      }
+    }
+
+    void loadServiceInfo();
+    const timer = window.setInterval(loadServiceInfo, HEALTH_REFRESH_MS);
+
+    return () => {
+      closed = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  return snapshot;
+}
+
 function StatusPill({ state }: { state: ServiceState }) {
   return <span className={`status-pill status-${state}`}>{stateLabels[state]}</span>;
 }
@@ -287,6 +381,45 @@ function RefreshCountdown({ generatedAt }: { generatedAt: string | null }) {
         aria-hidden="true"
       />
       <strong>{seconds}s</strong>
+    </div>
+  );
+}
+
+function ServiceInfoMetrics({ metrics }: { metrics: ServiceMetric[] }) {
+  return (
+    <div className="service-info-metrics" aria-label="Service Kennzahlen">
+      {metrics.map((metric) => (
+        <div className={`service-info-metric service-info-metric--${metric.tone ?? "neutral"}`} key={metric.id}>
+          <span>{metric.label}</span>
+          <strong>
+            {String(metric.value)}
+            {metric.unit ? <small>{metric.unit}</small> : null}
+          </strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ServiceInfoChart({ chart }: { chart: ServiceChart }) {
+  const maxValue = Math.max(1, ...chart.points.map((point) => point.value));
+
+  return (
+    <div className="service-info-chart" aria-label={chart.title}>
+      <div className="service-info-chart__heading">
+        <span>{chart.title}</span>
+        {chart.unit ? <small>{chart.unit}</small> : null}
+      </div>
+      <div className="service-info-chart__bars">
+        {chart.points.map((point) => (
+          <span
+            aria-label={`${point.label}: ${point.value}${chart.unit ?? ""}`}
+            key={`${point.label}-${point.value}`}
+            style={{ "--bar-height": `${Math.max(6, Math.round((point.value / maxValue) * 100))}%` } as React.CSSProperties}
+            title={`${point.label}: ${point.value}${chart.unit ?? ""}`}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -462,16 +595,21 @@ function LogDetail({ entry }: { entry: (typeof logbookEntries)[number] }) {
 
 function ServiceDetail({
   service,
-  generatedAt
+  generatedAt,
+  serviceInfo
 }: {
   service: PublicService | undefined;
   generatedAt: string | null;
+  serviceInfo: ServiceInfoResult | undefined;
 }) {
   if (!service) {
     return null;
   }
 
   const Icon = iconMap[service.icon];
+  const infoStatus = serviceInfo?.status ?? service.infoState;
+  const infoData = serviceInfo?.data ?? null;
+  const serviceActions = infoData?.actions?.length ? infoData.actions : null;
 
   return (
     <article className="detail-panel detail-panel--service" aria-label="Modul Detail" data-active-detail key={service.id}>
@@ -485,7 +623,7 @@ function ServiceDetail({
         </div>
       </div>
       <p className="detail-copy" data-active-description>
-        {service.description} Dieses Panel ist für Live-Details und Service-Actions vorbereitet,
+        {infoData?.summary ?? service.description} Dieses Panel ist für Live-Details und Service-Actions vorbereitet,
         sobald der Dienst seine öffentlichen Metadaten per API bereitstellt. Sichtbar bleiben nur
         freigegebene Statusdaten; Betriebsdetails und interne Routen bleiben serverseitig.
       </p>
@@ -493,10 +631,27 @@ function ServiceDetail({
         <span>Status: {stateLabels[service.state]}</span>
         <span>Update: {formatTime(service.updatedAt)}</span>
         <span>{service.responseMs !== null ? `Antwort: ${service.responseMs} ms` : service.message}</span>
+        <span>{infoStateLabels[infoStatus]}</span>
+      </div>
+      <div className="service-info-zone">
+        {infoData?.metrics?.length ? <ServiceInfoMetrics metrics={infoData.metrics} /> : null}
+        {infoData?.charts?.[0] ? <ServiceInfoChart chart={infoData.charts[0]} /> : null}
+        {!infoData ? (
+          <p className="service-info-empty">
+            {serviceInfo?.message ?? "Service-Info-API wird geprüft. Dienste können den öffentlichen Info-Endpunkt später implementieren."}
+          </p>
+        ) : null}
       </div>
       <RefreshCountdown generatedAt={generatedAt} />
       <div className="service-actions" aria-label={`${service.name} Aktionen`}>
-        {service.href ? (
+        {serviceActions ? (
+          serviceActions.map((action) => (
+            <a className="service-card__link" href={action.href} key={action.id}>
+              {action.label}
+              <ArrowUpRight size={17} aria-hidden="true" />
+            </a>
+          ))
+        ) : service.href ? (
           <a className="service-card__link" href={service.href}>
             Öffnen
             <ArrowUpRight size={17} aria-hidden="true" />
@@ -553,6 +708,7 @@ function ThemeDock({
 
 function App() {
   const { snapshot, socketState } = useHealth();
+  const serviceInfoSnapshot = useServiceInfo();
   const [activeTheme, setActiveTheme] = useState<ThemeId>(() => applyInitialTheme());
   const [activeLogId, setActiveLogId] = useState(logbookEntries[0]!.id);
   const [activeServiceId, setActiveServiceId] = useState<string | null>(null);
@@ -567,6 +723,10 @@ function App() {
     [activeServices]
   );
   const activeService = visibleServices.find((service) => service.id === activeServiceId) ?? visibleServices[0];
+  const serviceInfoById = useMemo(
+    () => new Map((serviceInfoSnapshot?.services ?? []).map((serviceInfo) => [serviceInfo.serviceId, serviceInfo])),
+    [serviceInfoSnapshot]
+  );
 
   function changeTheme(theme: ThemeId) {
     const update = () => {
@@ -712,7 +872,11 @@ function App() {
               </>
             )}
           </div>
-          <ServiceDetail service={activeService} generatedAt={snapshot?.generatedAt ?? null} />
+          <ServiceDetail
+            service={activeService}
+            generatedAt={snapshot?.generatedAt ?? null}
+            serviceInfo={activeService ? serviceInfoById.get(activeService.id) : undefined}
+          />
         </div>
       </section>
       <ThemeDock activeTheme={activeTheme} onThemeChange={changeTheme} />

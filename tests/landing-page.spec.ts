@@ -17,6 +17,7 @@ test("service card updates the fixed module detail panel on hover", async ({ pag
   await expect(card.getByText("FOCUS")).toBeVisible();
   await expect(detail.getByText("Service Detail")).toBeVisible();
   await expect(detail.getByRole("link", { name: /Öffnen/i })).toBeVisible();
+  await expect(detail.getByText(/API offen|API aktiv|API-Prüfung|API Fehler/)).toBeVisible();
   const detailBox = await detail.boundingBox();
   expect(detailBox).not.toBeNull();
   expect(detailBox!.width).toBeGreaterThan(initialBox!.width * 1.5);
@@ -26,6 +27,20 @@ test("service card updates the fixed module detail panel on hover", async ({ pag
   await expect(detail.getByRole("heading", { name: "Auth / SSO" })).toBeVisible();
   await expect(page.getByLabel("Auth / SSO Details anzeigen")).toHaveAttribute("aria-selected", "true");
   await expect(card).toHaveAttribute("aria-selected", "false");
+});
+
+test("service info OpenAPI and aggregation endpoints are available", async ({ page }) => {
+  const openApiResponse = await page.request.get("/api/openapi.json");
+  expect(openApiResponse.ok()).toBe(true);
+  const openApi = await openApiResponse.json();
+  expect(openApi.openapi).toBe("3.1.0");
+  expect(openApi.paths["/.well-known/schnick-schnack/service-info.json"]).toBeTruthy();
+
+  const serviceInfoResponse = await page.request.get("/api/service-info");
+  expect(serviceInfoResponse.ok()).toBe(true);
+  const serviceInfo = await serviceInfoResponse.json();
+  expect(Array.isArray(serviceInfo.services)).toBe(true);
+  expect(serviceInfo.services.some((service: { serviceId: string }) => service.serviceId === "voice")).toBe(true);
 });
 
 test("service cards show a reverse refresh countdown", async ({ page }) => {
