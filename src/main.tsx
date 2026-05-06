@@ -58,13 +58,25 @@ const iconMap = {
   shield: ShieldCheck
 };
 
-const wordSegments = ["Lu", "To", "Bo"] as const;
+const wordPermutations = [
+  ["Lu", "To", "Bo"],
+  ["Lu", "Bo", "To"],
+  ["To", "Lu", "Bo"],
+  ["To", "Bo", "Lu"],
+  ["Bo", "Lu", "To"],
+  ["Bo", "To", "Lu"]
+] as const;
 
 function shuffleSegments(): string[] {
-  return [...wordSegments]
-    .map((value) => ({ value, order: Math.random() }))
-    .sort((left, right) => left.order - right.order)
-    .map((item) => item.value);
+  const next = wordPermutations[Math.floor(Math.random() * wordPermutations.length)] ?? wordPermutations[0];
+  return [...next];
+}
+
+function nextSegments(current: string[]): string[] {
+  const currentKey = current.join("");
+  const choices = wordPermutations.filter((segments) => segments.join("") !== currentKey);
+  const next = choices[Math.floor(Math.random() * choices.length)] ?? wordPermutations[0];
+  return [...next];
 }
 
 function formatTime(value: string | null): string {
@@ -168,6 +180,7 @@ function ServiceCard({ service }: { service: PublicService }) {
     <article
       className={cardClassName}
       onClick={openDetail}
+      onMouseEnter={openDetail}
       onMouseLeave={closeDetail}
       onFocus={openDetail}
       onBlur={(event) => {
@@ -236,10 +249,28 @@ function ServiceCard({ service }: { service: PublicService }) {
 }
 
 function Wordmark() {
-  const segments = useMemo(() => shuffleSegments(), []);
+  const [segments, setSegments] = useState(() => shuffleSegments());
+  const [phase, setPhase] = useState<"entering" | "idle" | "leaving">("entering");
+
+  useEffect(() => {
+    const settle = window.setTimeout(() => setPhase("idle"), 900);
+    const interval = window.setInterval(() => {
+      setPhase("leaving");
+      window.setTimeout(() => {
+        setSegments((current) => nextSegments(current));
+        setPhase("entering");
+        window.setTimeout(() => setPhase("idle"), 900);
+      }, 320);
+    }, 12000);
+
+    return () => {
+      window.clearTimeout(settle);
+      window.clearInterval(interval);
+    };
+  }, []);
 
   return (
-    <div className="wordmark" aria-label={segments.join("")}>
+    <div className={`wordmark wordmark--${phase}`} aria-label={segments.join("")}>
       {segments.map((segment, index) => (
         <span key={`${segment}-${index}`} style={{ "--segment-index": index } as React.CSSProperties}>
           {segment}
@@ -263,6 +294,11 @@ function App() {
 
   return (
     <main>
+      <div className="grid-runners" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
       <section className="hero" aria-labelledby="page-title">
         <div className="hero__content">
           <div className="eyebrow">
