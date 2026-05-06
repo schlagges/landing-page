@@ -152,36 +152,84 @@ function StatusPill({ state }: { state: ServiceState }) {
 }
 
 function ServiceCard({ service }: { service: PublicService }) {
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
   const Icon = iconMap[service.icon];
+  const cardClassName = `service-card${isDetailOpen ? " service-card--detail" : ""}`;
+
+  function openDetail() {
+    setIsDetailOpen(true);
+  }
+
+  function closeDetail() {
+    setIsDetailOpen(false);
+  }
 
   return (
-    <article className="service-card">
+    <article
+      className={cardClassName}
+      onClick={openDetail}
+      onMouseLeave={closeDetail}
+      onFocus={openDetail}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          closeDetail();
+        }
+      }}
+      tabIndex={0}
+      aria-label={`${service.name} Details anzeigen`}
+    >
       <div className="service-card__shell">
-        <div className="service-card__topline">
-          <div className="service-icon" aria-hidden="true">
-            <Icon size={24} strokeWidth={2} />
+        <div className="service-card__face service-card__face--front">
+          <div className="service-card__topline">
+            <div className="service-icon" aria-hidden="true">
+              <Icon size={24} strokeWidth={2} />
+            </div>
+            <StatusPill state={service.state} />
           </div>
-          <StatusPill state={service.state} />
+          <div>
+            <h3>{service.name}</h3>
+            <p>{service.description}</p>
+          </div>
+          <div className="service-card__meta">
+            <span>
+              <Clock3 size={15} aria-hidden="true" />
+              {formatTime(service.updatedAt)}
+            </span>
+            {service.responseMs !== null ? <span>{service.responseMs} ms</span> : <span>{service.message}</span>}
+          </div>
         </div>
-        <div>
-          <h3>{service.name}</h3>
+
+        <div className="service-card__face service-card__face--back" aria-hidden={!isDetailOpen}>
+          <div className="detail-header">
+            <div className="service-icon service-icon--detail" aria-hidden="true">
+              <Icon size={26} strokeWidth={2} />
+            </div>
+            <div>
+              <span>Service Detail</span>
+              <h3>{service.name}</h3>
+            </div>
+          </div>
           <p>{service.description}</p>
+          <div className="detail-metrics">
+            <span>Status: {stateLabels[service.state]}</span>
+            <span>Update: {formatTime(service.updatedAt)}</span>
+            <span>{service.responseMs !== null ? `Antwort: ${service.responseMs} ms` : service.message}</span>
+          </div>
+          <div className="service-actions" aria-label={`${service.name} Aktionen`}>
+            {service.href ? (
+              <a
+                className="service-card__link"
+                href={service.href}
+                onClick={(event) => event.stopPropagation()}
+              >
+                Öffnen
+                <ArrowUpRight size={17} aria-hidden="true" />
+              </a>
+            ) : (
+              <span className="service-card__disabled">Noch nicht verfügbar</span>
+            )}
+          </div>
         </div>
-        <div className="service-card__meta">
-          <span>
-            <Clock3 size={15} aria-hidden="true" />
-            {formatTime(service.updatedAt)}
-          </span>
-          {service.responseMs !== null ? <span>{service.responseMs} ms</span> : <span>{service.message}</span>}
-        </div>
-        {service.href ? (
-          <a className="service-card__link" href={service.href}>
-            Öffnen
-            <ArrowUpRight size={17} aria-hidden="true" />
-          </a>
-        ) : (
-          <span className="service-card__disabled">Noch nicht verfügbar</span>
-        )}
       </div>
     </article>
   );
