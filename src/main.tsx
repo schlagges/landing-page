@@ -4,9 +4,9 @@ import {
   Clock3,
   GitBranch,
   Mic2,
-  RadioTower,
   RefreshCw,
   ShieldCheck,
+  Slack,
   SwatchBook
 } from "lucide-react";
 import { StrictMode, useEffect, useMemo, useRef, useState } from "react";
@@ -14,13 +14,13 @@ import { createRoot } from "react-dom/client";
 import "./styles.css";
 
 type ServiceState = "online" | "degraded" | "offline" | "checking" | "planned";
-type ServiceCategory = "communication" | "identity" | "realtime" | "development" | "roadmap";
+type ServiceCategory = "communication" | "identity" | "development" | "roadmap";
 
 type PublicService = {
   id: string;
   name: string;
   category: ServiceCategory;
-  icon: "mic" | "shield" | "radio" | "gitlab";
+  icon: "mic" | "shield" | "gitlab" | "slack";
   href: string | null;
   description: string;
   state: ServiceState;
@@ -135,8 +135,8 @@ const infoStateLabels: Record<ServiceInfoState, string> = {
 const iconMap = {
   gitlab: GitBranch,
   mic: Mic2,
-  radio: RadioTower,
-  shield: ShieldCheck
+  shield: ShieldCheck,
+  slack: Slack
 };
 
 function prefersReducedMotion(): boolean {
@@ -188,8 +188,8 @@ const logbookEntries = [
     title: "Portal online",
     meta: "Log 001 / Public Gateway",
     date: "06.05.2026",
-    teaser: "Das öffentliche Gateway bündelt Voice, Auth und Realtime in einer Statusfläche.",
-    body: `Das Portal ist der sichtbare Einstiegspunkt für die Dienste auf schnick-schnack.info. Der wichtigste Architekturentscheid war, die öffentliche Ansicht strikt von internen Betriebsdetails zu trennen. Besucher sehen Namen, Status, Aktualisierung und Aktionen, aber keine Container, Ports, Datenbankadressen oder privaten Routings. Die Statusdaten entstehen serverseitig und werden als reduzierte Public-Health-Snapshots ausgeliefert. Der Browser bekommt dadurch nur die Information, die für Orientierung und Vertrauen sinnvoll ist. Voice wird als geschützter OpenVoice-Zugang geführt, Auth verweist auf die SSO-Ebene, und Realtime repräsentiert die Medienstrecke. Im Hintergrund laufen weitere Bausteine wie Postgres, Valkey, Prometheus, Grafana, Coturn und LiveKit, doch die Landing Page behandelt sie nicht als öffentliche Zielsysteme. Das ist Absicht: Infrastruktur unterstützt das Portal, sie wird aber nicht selbst zum Exponat. Der Health-Server aktualisiert regelmäßig und verteilt Snapshots über WebSocket. Wenn die Verbindung fehlt, fällt die Oberfläche auf Abfrage zurück. So bleibt das Display lebendig, ohne Nutzer mit technischen Fehlermeldungen zu belasten. Das erste Deployment wurde als Docker-Service auf dem Server bereitgestellt und lokal hinter Nginx angebunden. Die Domain kann über TLS terminieren, während die Anwendung selbst intern bleibt. Damit ist die Seite öffentlich schnell erreichbar, aber operativ sauber gekapselt. Dieser Stand ist die Basis für spätere Detail-APIs: Jeder Dienst kann künftig eigene öffentliche Metadaten liefern, während das Portal weiterhin entscheidet, welche Informationen wirklich auf die Brücke gehören. Auch das Deployment wurde reproduzierbar gehalten: Build, Containerstart, Healthcheck und GitHub-Push sind dokumentiert und geprüft. Änderungen können dadurch zügig veröffentlicht werden, ohne am Server manuell Dateien zu editieren oder Zustände zu erraten. Für Besucher entsteht ein ruhiger Einstieg, für Betreiber bleibt die Oberfläche kontrollierbar, testbar und erweiterbar. Der nächste Schritt wird sein, Logbuch und Servicekatalog aus Datenquellen zu speisen, damit Deployments, Wartungsfenster und neue Module ohne Frontend-Release erscheinen. Trotzdem bleibt der Sicherheitsfilter zentral: öffentlich ist nur, was bewusst freigegeben wurde. Diese Linie bleibt für spätere Integrationen verbindlich.`
+    teaser: "Das öffentliche Gateway bündelt Voice, Auth, Slack und GitLab in einer Statusfläche.",
+    body: `Das Portal ist der sichtbare Einstiegspunkt für die Dienste auf schnick-schnack.info. Der wichtigste Architekturentscheid war, die öffentliche Ansicht strikt von internen Betriebsdetails zu trennen. Besucher sehen Namen, Status, Aktualisierung und Aktionen, aber keine Container, Ports, Datenbankadressen oder privaten Routings. Die Statusdaten entstehen serverseitig und werden als reduzierte Public-Health-Snapshots ausgeliefert. Der Browser bekommt dadurch nur die Information, die für Orientierung und Vertrauen sinnvoll ist. Voice wird als geschützter OpenVoice-Zugang geführt, Auth verweist auf die SSO-Ebene, Slack bündelt die Team-Kommunikation, und GitLab bildet den Entwicklungshub. Im Hintergrund laufen weitere Bausteine wie Postgres, Valkey, Prometheus, Grafana, Coturn und LiveKit, doch die Landing Page behandelt sie nicht als öffentliche Zielsysteme. Das ist Absicht: Infrastruktur unterstützt das Portal, sie wird aber nicht selbst zum Exponat. Der Health-Server aktualisiert regelmäßig und verteilt Snapshots über WebSocket. Wenn die Verbindung fehlt, fällt die Oberfläche auf Abfrage zurück. So bleibt das Display lebendig, ohne Nutzer mit technischen Fehlermeldungen zu belasten. Das erste Deployment wurde als Docker-Service auf dem Server bereitgestellt und lokal hinter Nginx angebunden. Die Domain kann über TLS terminieren, während die Anwendung selbst intern bleibt. Damit ist die Seite öffentlich schnell erreichbar, aber operativ sauber gekapselt. Dieser Stand ist die Basis für spätere Detail-APIs: Jeder Dienst kann künftig eigene öffentliche Metadaten liefern, während das Portal weiterhin entscheidet, welche Informationen wirklich auf die Brücke gehören. Auch das Deployment wurde reproduzierbar gehalten: Build, Containerstart, Healthcheck und GitHub-Push sind dokumentiert und geprüft. Änderungen können dadurch zügig veröffentlicht werden, ohne am Server manuell Dateien zu editieren oder Zustände zu erraten. Für Besucher entsteht ein ruhiger Einstieg, für Betreiber bleibt die Oberfläche kontrollierbar, testbar und erweiterbar. Der nächste Schritt wird sein, Logbuch und Servicekatalog aus Datenquellen zu speisen, damit Deployments, Wartungsfenster und neue Module ohne Frontend-Release erscheinen. Trotzdem bleibt der Sicherheitsfilter zentral: öffentlich ist nur, was bewusst freigegeben wurde. Diese Linie bleibt für spätere Integrationen verbindlich.`
   },
   {
     id: "hud-interface",
@@ -213,7 +213,15 @@ const logbookEntries = [
     meta: "Log 004 / Development Hub",
     date: "06.05.2026",
     teaser: "GitLab ist aus der Roadmap in die aktiven Module gewechselt.",
-    body: `GitLab ist jetzt als aktiver Dienst im Portal sichtbar und nicht mehr nur als geplantes Modul markiert. Damit bekommt die Entwicklungsplattform denselben öffentlichen Statuspfad wie Voice, Auth und Realtime: Die Landing Page prüft Erreichbarkeit, zeigt den Dienst als auswählbare Kachel und führt den Benutzer über die öffentliche Subdomain weiter. Inhaltlich verschiebt sich GitLab damit von einer bloßen Ankündigung zu einem produktiven Baustein der Umgebung. Der Dienst ist für Repositories, Issues, Projektorganisation und spätere CI/CD-Abläufe vorgesehen. Gerade deshalb bleibt die Darstellung bewusst knapp: Öffentlich sichtbar sind Name, Zweck, Verfügbarkeit und der Einstieg. Interne Runner, Registry-Routen, SSH-Ports, Datenbankbezüge oder Administrationsdetails gehören nicht auf die Startseite. Parallel greift auch für GitLab die neue Service-Info-Spezifikation. Sobald der Dienst den Endpunkt /.well-known/schnick-schnack/service-info.json bereitstellt, kann das Portal zusätzliche öffentliche Metadaten anzeigen. Denkbar sind Projektanzahl, offene Issues, Pipeline-Status, letzte Deployments, Runner-Verfügbarkeit oder Wartungshinweise. Diese Daten werden nicht hart im Frontend verdrahtet, sondern über die Aggregation der Landing Page abgefragt. Dadurch kann GitLab später eigenständig wachsen, ohne dass jedes neue Detail einen Portal-Release erzwingt. Wichtig ist außerdem die Trennung zwischen Betriebszustand und Detaildaten: Der Health-Check beantwortet, ob der Dienst erreichbar ist; die Service-Info-API beschreibt, was öffentlich über den Dienst gezeigt werden darf. So bleibt das Cockpit robust, auch wenn ein Dienst die Zusatz-API noch nicht implementiert hat. Für Besucher entsteht ein klarerer Eindruck: Die Entwicklungsplattform ist Teil des Systems, aber weiterhin sauber in die Sicherheitslinie des öffentlichen Displays eingebunden. Der nächste sinnvolle Schritt ist ein GitLab-spezifischer Info-Payload mit Projektmetriken, Pipeline-Übersicht und direkten Aktionen zu Gruppen oder Repositories.`
+    body: `GitLab ist jetzt als aktiver Dienst im Portal sichtbar und nicht mehr nur als geplantes Modul markiert. Damit bekommt die Entwicklungsplattform denselben öffentlichen Statuspfad wie Voice, Auth und Slack: Die Landing Page prüft Erreichbarkeit, zeigt den Dienst als auswählbare Kachel und führt den Benutzer über die öffentliche Subdomain weiter. Inhaltlich verschiebt sich GitLab damit von einer bloßen Ankündigung zu einem produktiven Baustein der Umgebung. Der Dienst ist für Repositories, Issues, Projektorganisation und spätere CI/CD-Abläufe vorgesehen. Gerade deshalb bleibt die Darstellung bewusst knapp: Öffentlich sichtbar sind Name, Zweck, Verfügbarkeit und der Einstieg. Interne Runner, Registry-Routen, SSH-Ports, Datenbankbezüge oder Administrationsdetails gehören nicht auf die Startseite. Parallel greift auch für GitLab die neue Service-Info-Spezifikation. Sobald der Dienst den Endpunkt /.well-known/schnick-schnack/service-info.json bereitstellt, kann das Portal zusätzliche öffentliche Metadaten anzeigen. Denkbar sind Projektanzahl, offene Issues, Pipeline-Status, letzte Deployments, Runner-Verfügbarkeit oder Wartungshinweise. Diese Daten werden nicht hart im Frontend verdrahtet, sondern über die Aggregation der Landing Page abgefragt. Dadurch kann GitLab später eigenständig wachsen, ohne dass jedes neue Detail einen Portal-Release erzwingt. Wichtig ist außerdem die Trennung zwischen Betriebszustand und Detaildaten: Der Health-Check beantwortet, ob der Dienst erreichbar ist; die Service-Info-API beschreibt, was öffentlich über den Dienst gezeigt werden darf. So bleibt das Cockpit robust, auch wenn ein Dienst die Zusatz-API noch nicht implementiert hat. Für Besucher entsteht ein klarerer Eindruck: Die Entwicklungsplattform ist Teil des Systems, aber weiterhin sauber in die Sicherheitslinie des öffentlichen Displays eingebunden. Der nächste sinnvolle Schritt ist ein GitLab-spezifischer Info-Payload mit Projektmetriken, Pipeline-Übersicht und direkten Aktionen zu Gruppen oder Repositories.`
+  },
+  {
+    id: "slack-online",
+    title: "Slack angebunden",
+    meta: "Log 005 / Team Comms",
+    date: "07.05.2026",
+    teaser: "Slack ist als öffentlicher Einstieg für Team-Kommunikation und Betriebsabsprachen sichtbar.",
+    body: `Slack ist als neues Modul in die öffentliche Dienstübersicht aufgenommen worden. Die Kachel steht neben Voice, Auth und GitLab und folgt derselben Sicherheitslinie: Sichtbar sind nur Name, Zweck, Status, Aktualisierung und der öffentliche Einstieg. Die Landing Page verrät keine internen Routen, keine Containerstruktur und keine Betriebsports. Technisch hängt Slack am bestehenden Health- und Service-Info-Modell. Der Health-Check prüft die Erreichbarkeit des öffentlichen Kommunikationsdienstes, während die optionale Service-Info-API später zusätzliche freigegebene Kennzahlen liefern kann. Sinnvolle Werte wären aktive Nutzer, öffentliche Channel-Zahl, letzte Nachrichtenrate, Integrationsstatus, geplante Wartung oder Hinweise auf eingeschränkte Anmeldung. Diese Daten sollen nicht im Frontend hart verdrahtet werden. Jeder Dienst liefert seinen eigenen öffentlichen Payload über /.well-known/schnick-schnack/service-info.json, und das Portal aggregiert nur, was tatsächlich verfügbar ist. Dadurch kann Slack später eigene Actions anbieten, etwa einen direkten Einstieg in definierte Workspaces, Statusseiten, Onboarding-Hinweise oder Betriebs-Channels. Bis diese API implementiert ist, bleibt das Detailpanel bewusst defensiv und zeigt den API-Zustand als offen oder nicht verfügbar. Für die UX ist wichtig, dass Slack nicht wie ein technischer Unterdienst wirkt, sondern wie ein bewusst freigegebenes Kommunikationsmodul. Das Icon, die Beschreibung und die Detailansicht sind deshalb auf Team-Kommunikation ausgerichtet. Der technische Medienpfad bleibt für Voice relevant, muss aber nicht als eigener öffentlicher Einstieg erklärt werden. Damit wird die Startseite klarer: Besucher sehen Dienste, die sie direkt nutzen können. Infrastruktur und Protokollbausteine bleiben im Hintergrund. Der nächste gute Schritt ist ein Slack-spezifischer Service-Info-Payload mit Nutzer- und Channel-Metriken, damit die Detailansicht mehr als reine Erreichbarkeit zeigt, ohne operative Interna offenzulegen.`
   }
 ];
 
@@ -435,6 +443,58 @@ function ServiceInfoChart({ chart }: { chart: ServiceChart }) {
   );
 }
 
+function ServiceInfoCharts({ charts }: { charts: ServiceChart[] }) {
+  return (
+    <div className="service-info-charts" aria-label="Service Diagramme">
+      {charts.map((chart) => (
+        <ServiceInfoChart chart={chart} key={chart.id} />
+      ))}
+    </div>
+  );
+}
+
+function ServiceInfoSections({ sections }: { sections: NonNullable<ServiceInfo["sections"]> }) {
+  return (
+    <div className="service-info-sections" aria-label="Service Details">
+      {sections.map((section) => (
+        <section className="service-info-section" key={section.id}>
+          <span>{section.title}</span>
+          <p>{section.body}</p>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function SlackChannelPreview() {
+  const channelUrl = "https://slack.schnick-schnack.info/channel/general";
+
+  return (
+    <section className="slack-channel" aria-label="Slack Channel Vorschau">
+      <div className="slack-channel__header">
+        <div>
+          <span>Channel Bridge</span>
+          <strong>#general</strong>
+        </div>
+        <a href={channelUrl}>
+          Channel öffnen
+          <ArrowUpRight size={15} aria-hidden="true" />
+        </a>
+      </div>
+      <div className="slack-channel__stream">
+        <article>
+          <span>system</span>
+          <p>Portal bereit: Health, News und Service-Info laufen über die öffentliche Cockpit-Schicht.</p>
+        </article>
+        <article>
+          <span>ops</span>
+          <p>Channel-Anbindung vorbereitet. Echte Nachrichten können später über die Slack/Rocket.Chat-API gespiegelt werden.</p>
+        </article>
+      </div>
+    </section>
+  );
+}
+
 function ServiceCard({
   service,
   generatedAt,
@@ -647,7 +707,9 @@ function ServiceDetail({
       </div>
       <div className="service-info-zone">
         {infoData?.metrics?.length ? <ServiceInfoMetrics metrics={infoData.metrics} /> : null}
-        {infoData?.charts?.[0] ? <ServiceInfoChart chart={infoData.charts[0]} /> : null}
+        {infoData?.charts?.length ? <ServiceInfoCharts charts={infoData.charts} /> : null}
+        {infoData?.sections?.length ? <ServiceInfoSections sections={infoData.sections} /> : null}
+        {service.id === "slack" ? <SlackChannelPreview /> : null}
         {!infoData ? (
           <p className="service-info-empty">
             {serviceInfo?.message ?? "Service-Info-API wird geprüft. Dienste können den öffentlichen Info-Endpunkt später implementieren."}
@@ -837,7 +899,7 @@ function App() {
           <span className={`status-dot status-dot--${snapshot?.overall ?? "checking"}`} />
           <div>
             <strong>{snapshot ? overallLabels[snapshot.overall] : "Status wird geladen"}</strong>
-            <span>{onlineCount} von {activeServices.length || 3} Diensten online</span>
+            <span>{onlineCount} von {activeServices.length || 4} Diensten online</span>
           </div>
         </aside>
       </section>

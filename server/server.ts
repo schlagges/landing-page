@@ -5,13 +5,13 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 
 type ServiceState = "online" | "degraded" | "offline" | "checking" | "planned";
-type ServiceCategory = "communication" | "identity" | "realtime" | "development" | "roadmap";
+type ServiceCategory = "communication" | "identity" | "development" | "roadmap";
 
 type PublicService = {
   id: string;
   name: string;
   category: ServiceCategory;
-  icon: "mic" | "shield" | "radio" | "gitlab";
+  icon: "mic" | "shield" | "gitlab" | "slack";
   href: string | null;
   description: string;
   state: ServiceState;
@@ -135,14 +135,14 @@ const targets: HealthTarget[] = [
     okStatuses: [200, 204, 301, 302, 307, 308]
   },
   {
-    id: "realtime",
-    name: "Realtime",
-    category: "realtime",
-    icon: "radio",
-    href: "https://voice.schnick-schnack.info",
-    description: "Live-Kommunikation für Sprach- und Medienverbindungen.",
-    url: process.env.HEALTH_REALTIME_URL ?? "https://voice.schnick-schnack.info/livekit/",
-    infoUrl: process.env.INFO_REALTIME_URL ?? defaultInfoUrl("https://voice.schnick-schnack.info"),
+    id: "slack",
+    name: "Slack",
+    category: "communication",
+    icon: "slack",
+    href: "https://slack.schnick-schnack.info",
+    description: "Team-Kommunikation, Channels und Benachrichtigungen für Betrieb und Projekte.",
+    url: process.env.HEALTH_SLACK_URL ?? "https://slack.schnick-schnack.info/",
+    infoUrl: process.env.INFO_SLACK_URL ?? defaultInfoUrl("https://slack.schnick-schnack.info"),
     okStatuses: [200, 204, 301, 302, 307, 308, 401, 403]
   },
   {
@@ -255,11 +255,14 @@ async function fetchServiceInfo(target: HealthTarget): Promise<ServiceInfoResult
     });
     const responseMs = Math.round(performance.now() - startedAt);
 
-    if (response.status === 404) {
+    if ([401, 403, 404].includes(response.status)) {
       return {
         serviceId: target.id,
         status: "unsupported",
-        message: "Service-Info-API noch nicht implementiert.",
+        message:
+          response.status === 404
+            ? "Service-Info-API noch nicht implementiert."
+            : "Service-Info-API ist noch nicht öffentlich freigegeben.",
         updatedAt: new Date().toISOString(),
         responseMs,
         data: null

@@ -41,6 +41,8 @@ test("service info OpenAPI and aggregation endpoints are available", async ({ pa
   const serviceInfo = await serviceInfoResponse.json();
   expect(Array.isArray(serviceInfo.services)).toBe(true);
   expect(serviceInfo.services.some((service: { serviceId: string }) => service.serviceId === "voice")).toBe(true);
+  expect(serviceInfo.services.some((service: { serviceId: string }) => service.serviceId === "slack")).toBe(true);
+  expect(serviceInfo.services.some((service: { serviceId: string }) => service.serviceId === "realtime")).toBe(false);
 });
 
 test("service cards show a reverse refresh countdown", async ({ page }) => {
@@ -102,7 +104,9 @@ test("logbook is prominent above modules", async ({ page }) => {
   await expect(entries.getByText("HUD Interface aktiviert")).toBeVisible();
   await expect(entries.getByText("Service Panels erweitert")).toBeVisible();
   await expect(entries.getByText("GitLab freigeschaltet")).toBeVisible();
+  await expect(entries.getByText("Slack angebunden")).toBeVisible();
   await expect(entries.getByText("06.05.2026").first()).toBeVisible();
+  await expect(entries.getByText("07.05.2026")).toBeVisible();
   await expect(newsDetail.getByText("Das Portal ist der sichtbare Einstiegspunkt")).toBeVisible();
 
   const logbookBox = await logbook.boundingBox();
@@ -122,6 +126,10 @@ test("logbook is prominent above modules", async ({ page }) => {
   await logbook.getByLabel("GitLab freigeschaltet Details anzeigen").click();
   await expect(newsDetail.getByText("GitLab ist jetzt als aktiver Dienst")).toBeVisible();
   await expect(newsDetail.getByText(/Log 004 \/ Development Hub \/ 06.05.2026/)).toBeVisible();
+
+  await logbook.getByLabel("Slack angebunden Details anzeigen").click();
+  await expect(newsDetail.getByText("Slack ist als neues Modul")).toBeVisible();
+  await expect(newsDetail.getByText(/Log 005 \/ Team Comms \/ 07.05.2026/)).toBeVisible();
 });
 
 test("gitlab is an active module with public link", async ({ page }) => {
@@ -134,6 +142,28 @@ test("gitlab is an active module with public link", async ({ page }) => {
   const detail = page.getByLabel("Modul Detail");
   await expect(detail.getByRole("heading", { name: "GitLab" })).toBeVisible();
   await expect(detail.getByRole("link", { name: /Öffnen/i })).toHaveAttribute("href", "https://gitlab.schnick-schnack.info");
+});
+
+test("slack is an active module and realtime is hidden", async ({ page }) => {
+  await page.goto("/");
+
+  const slack = page.getByLabel("Slack Details anzeigen");
+  await expect(slack).toBeVisible();
+  await expect(page.getByLabel("Realtime Details anzeigen")).toHaveCount(0);
+
+  await slack.click();
+
+  const detail = page.getByLabel("Modul Detail");
+  await expect(detail.getByRole("heading", { name: "Slack" })).toBeVisible();
+  await expect(detail.getByRole("link", { name: "Öffnen", exact: true })).toHaveAttribute(
+    "href",
+    "https://slack.schnick-schnack.info"
+  );
+  await expect(detail.getByLabel("Slack Channel Vorschau")).toBeVisible();
+  await expect(detail.getByRole("link", { name: /Channel öffnen/i })).toHaveAttribute(
+    "href",
+    "https://slack.schnick-schnack.info/channel/general"
+  );
 });
 
 test("brief hover pass does not steal the selected module", async ({ page }) => {
