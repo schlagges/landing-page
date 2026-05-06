@@ -281,13 +281,12 @@ function RefreshCountdown({ generatedAt }: { generatedAt: string | null }) {
 
   return (
     <div className="refresh-countdown" aria-label={`Nächster Refresh in ${seconds} Sekunden`}>
-      <div className="refresh-countdown__label">
-        <span>Next refresh</span>
-        <strong>{seconds}s</strong>
-      </div>
-      <div className="refresh-countdown__track">
-        <span style={{ "--refresh-progress": progress } as React.CSSProperties} />
-      </div>
+      <span
+        className="refresh-countdown__dial"
+        style={{ "--refresh-progress": progress } as React.CSSProperties}
+        aria-hidden="true"
+      />
+      <strong>{seconds}s</strong>
     </div>
   );
 }

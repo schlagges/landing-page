@@ -983,49 +983,52 @@ h2 {
 
 .refresh-countdown {
   align-self: end;
-  display: grid;
-  gap: 6px;
-  margin-top: 12px;
-}
-
-.refresh-countdown__label {
-  display: flex;
+  justify-self: start;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  color: var(--quiet);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.refresh-countdown__label strong {
-  color: var(--red-soft);
-  font-size: 12px;
-  letter-spacing: 0;
-  text-shadow: 0 0 10px rgba(var(--accent-2), 0.45);
-}
-
-.refresh-countdown__track {
-  position: relative;
-  overflow: hidden;
-  height: 6px;
-  border: 1px solid rgba(var(--accent-2), 0.28);
+  gap: 6px;
+  width: fit-content;
+  margin-top: 8px;
+  padding: 4px 7px 4px 5px;
+  border: 1px solid rgba(var(--accent), 0.16);
   border-radius: 999px;
-  background:
-    linear-gradient(90deg, rgba(var(--accent-2), 0.12), rgba(var(--accent), 0.08)),
-    rgba(8, 12, 18, 0.82);
+  background: rgba(0, 0, 0, 0.16);
+  color: var(--quiet);
+  box-shadow: inset 0 0 10px rgba(var(--accent), 0.035);
 }
 
-.refresh-countdown__track span {
+.refresh-countdown strong {
+  min-width: 20px;
+  color: rgba(var(--accent-2), 0.78);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  text-shadow: 0 0 8px rgba(var(--accent-2), 0.25);
+}
+
+.refresh-countdown__dial {
+  position: relative;
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background:
+    conic-gradient(rgba(var(--accent), 0.82) calc(var(--refresh-progress) * 1turn), rgba(var(--accent), 0.08) 0),
+    rgba(0, 0, 0, 0.22);
+  box-shadow:
+    0 0 10px rgba(var(--accent), 0.12),
+    inset 0 0 0 1px rgba(var(--accent), 0.18);
+  transition: background 180ms linear;
+}
+
+.refresh-countdown__dial::after {
   position: absolute;
-  inset: 0 auto 0 0;
-  width: calc(var(--refresh-progress) * 100%);
+  inset: 4px;
+  border: 1px solid rgba(var(--accent-2), 0.24);
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--red-soft), var(--primary-strong));
-  box-shadow: 0 0 12px rgba(var(--accent-2), 0.34);
-  transition: width 180ms linear;
+  background: var(--panel);
+  content: "";
 }
 
 .service-card__topline {

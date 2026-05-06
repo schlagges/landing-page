@@ -33,14 +33,18 @@ test("service cards show a reverse refresh countdown", async ({ page }) => {
 
   const card = page.getByLabel("Voice Details anzeigen");
   const countdown = card.locator(".service-card__face--front .refresh-countdown");
-  const progress = card.locator(".service-card__face--front .refresh-countdown__track span");
+  const dial = card.locator(".service-card__face--front .refresh-countdown__dial");
   await expect(countdown).toBeVisible();
 
-  const initialWidth = await progress.evaluate((element) => element.getBoundingClientRect().width);
+  const initialLabel = await countdown.textContent();
+  const initialBackground = await dial.evaluate((element) => getComputedStyle(element).backgroundImage);
   await page.waitForTimeout(650);
-  const laterWidth = await progress.evaluate((element) => element.getBoundingClientRect().width);
+  const laterLabel = await countdown.textContent();
+  const laterBackground = await dial.evaluate((element) => getComputedStyle(element).backgroundImage);
 
-  expect(laterWidth).toBeLessThan(initialWidth);
+  await expect(dial).toBeVisible();
+  expect(laterBackground).not.toBe(initialBackground);
+  expect(Number.parseInt(laterLabel ?? "0", 10)).toBeLessThanOrEqual(Number.parseInt(initialLabel ?? "0", 10));
 });
 
 test("wordmark reorders after the hold interval", async ({ page }) => {
