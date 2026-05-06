@@ -12,6 +12,9 @@ test("service card updates the fixed module detail panel on hover", async ({ pag
   expect(initialBox).not.toBeNull();
 
   await card.hover();
+  await expect(card).toHaveAttribute("aria-selected", "true");
+  await expect(card).toHaveClass(/is-selected/);
+  await expect(card.getByText("FOCUS")).toBeVisible();
   await expect(detail.getByText("Service Detail")).toBeVisible();
   await expect(detail.getByRole("link", { name: /Öffnen/i })).toBeVisible();
   const detailBox = await detail.boundingBox();
@@ -20,6 +23,8 @@ test("service card updates the fixed module detail panel on hover", async ({ pag
 
   await page.getByLabel("Auth / SSO Details anzeigen").hover();
   await expect(detail.getByRole("heading", { name: "Auth / SSO" })).toBeVisible();
+  await expect(page.getByLabel("Auth / SSO Details anzeigen")).toHaveAttribute("aria-selected", "true");
+  await expect(card).toHaveAttribute("aria-selected", "false");
 });
 
 test("service cards show a reverse refresh countdown", async ({ page }) => {
@@ -88,6 +93,7 @@ test("logbook is prominent above modules", async ({ page }) => {
   await expect(newsDetail.getByText("Das Portal ist der sichtbare Einstiegspunkt")).toBeVisible();
 
   await logbook.getByLabel("HUD Interface aktiviert Details anzeigen").hover();
+  await expect(logbook.getByLabel("HUD Interface aktiviert Details anzeigen")).toHaveAttribute("aria-selected", "true");
   await expect(newsDetail.getByText("Das Interface wurde von einer klassischen Landing Page")).toBeVisible();
 });
 
@@ -115,4 +121,22 @@ test("idle autopilot rotates news and module details", async ({ page }) => {
 
   await expect(newsDetail.getByRole("heading")).not.toHaveText(initialNews ?? "");
   await expect(moduleDetail.getByRole("heading")).not.toHaveText(initialModule ?? "");
+});
+
+test("theme dock switches themes and persists selection", async ({ page }) => {
+  await page.goto("/");
+
+  const neon = page.getByRole("button", { name: "Theme Neon Ice aktivieren" });
+  await expect(neon).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "crimson-command");
+
+  await neon.click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "neon-ice");
+  await expect(neon).toHaveAttribute("aria-pressed", "true");
+
+  const storedTheme = await page.evaluate(() => window.localStorage.getItem("schnick-schnack.theme"));
+  expect(storedTheme).toBe("neon-ice");
+
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "neon-ice");
 });

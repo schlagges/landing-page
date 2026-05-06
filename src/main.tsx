@@ -6,7 +6,8 @@ import {
   Mic2,
   RadioTower,
   RefreshCw,
-  ShieldCheck
+  ShieldCheck,
+  SwatchBook
 } from "lucide-react";
 import { StrictMode, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -38,6 +39,20 @@ type SocketState = "connecting" | "live" | "fallback";
 const HEALTH_REFRESH_MS = 10000;
 const IDLE_ROTATION_MS = 6500;
 const POINTER_IDLE_MS = 4800;
+const STORAGE_KEY = "schnick-schnack.theme";
+const DEFAULT_THEME = "crimson-command";
+const THEMES = [
+  { id: "crimson-command", label: "Crimson Command", colors: ["#6ffdf0", "#ff566f"] },
+  { id: "neon-ice", label: "Neon Ice", colors: ["#8be1ff", "#e6faff"] },
+  { id: "violet-warp", label: "Violet Warp", colors: ["#b770ff", "#ff56d3"] },
+  { id: "amber-terminal", label: "Amber Terminal", colors: ["#ffc75c", "#ff5f52"] },
+  { id: "bio-matrix", label: "Bio Matrix", colors: ["#61ff8b", "#d5ff63"] }
+] as const;
+
+type ThemeId = (typeof THEMES)[number]["id"];
+type ViewTransitionDocument = Document & {
+  startViewTransition?: (callback: () => void) => void;
+};
 
 const stateLabels: Record<ServiceState, string> = {
   checking: "Prüfung",
@@ -60,6 +75,40 @@ const iconMap = {
   radio: RadioTower,
   shield: ShieldCheck
 };
+
+function prefersReducedMotion(): boolean {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function normalizeTheme(theme: string | null | undefined): ThemeId {
+  return THEMES.some((item) => item.id === theme) ? (theme as ThemeId) : DEFAULT_THEME;
+}
+
+function isStorageAvailable(): boolean {
+  try {
+    const testKey = "__theme_test__";
+    window.localStorage.setItem(testKey, testKey);
+    window.localStorage.removeItem(testKey);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function applyTheme(theme: ThemeId, shouldSave = true) {
+  document.documentElement.dataset.theme = theme;
+
+  if (shouldSave && isStorageAvailable()) {
+    window.localStorage.setItem(STORAGE_KEY, theme);
+  }
+}
+
+function applyInitialTheme(): ThemeId {
+  const savedTheme = isStorageAvailable() ? window.localStorage.getItem(STORAGE_KEY) : null;
+  const initialTheme = normalizeTheme(savedTheme);
+  applyTheme(initialTheme, false);
+  return initialTheme;
+}
 
 const wordPermutations = [
   ["Lu", "To", "Bo"],
@@ -232,7 +281,9 @@ function ServiceCard({
 
   return (
     <article
-      className={cardClassName}
+      className={`${cardClassName}${isActive ? " is-selected" : ""}`}
+      data-selectable-card
+      aria-selected={isActive}
       onClick={onOpen}
       onMouseEnter={onOpen}
       onFocus={onOpen}
@@ -240,6 +291,7 @@ function ServiceCard({
       aria-label={`${service.name} Details anzeigen`}
     >
       <div className="service-card__shell">
+        <span className="selected-badge">FOCUS</span>
         <div className="service-card__face service-card__face--front">
           <div className="service-card__topline">
             <div className="service-icon" aria-hidden="true">
@@ -316,7 +368,7 @@ function Logbook({
         <small>Autopilot rotiert bei Inaktivität</small>
       </div>
       <div className="logbook__layout">
-        <div className="logbook__entries">
+        <div className="logbook__entries" data-card-group>
           {logbookEntries.map((entry) => (
             <LogCard
               entry={entry}
@@ -343,13 +395,16 @@ function LogCard({
 }) {
   return (
     <article
-      className={`log-entry${isActive ? " log-entry--active" : ""}`}
+      className={`log-entry${isActive ? " log-entry--active is-selected" : ""}`}
+      data-selectable-card
+      aria-selected={isActive}
       tabIndex={0}
       aria-label={`${entry.title} Details anzeigen`}
       onMouseEnter={onOpen}
       onFocus={onOpen}
       onClick={onOpen}
     >
+      <span className="selected-badge">FOCUS</span>
       <span>{entry.meta}</span>
       <h3>{entry.title}</h3>
       <p>{entry.teaser}</p>
@@ -359,17 +414,17 @@ function LogCard({
 
 function LogDetail({ entry }: { entry: (typeof logbookEntries)[number] }) {
   return (
-    <article className="detail-panel detail-panel--news" aria-label="News Detail">
+    <article className="detail-panel detail-panel--news" aria-label="News Detail" data-active-detail key={entry.id}>
       <div className="detail-header">
         <div className="service-icon service-icon--detail" aria-hidden="true">
           <Activity size={24} strokeWidth={2} />
         </div>
         <div>
           <span>{entry.meta}</span>
-          <h3>{entry.title}</h3>
+          <h3 data-active-title>{entry.title}</h3>
         </div>
       </div>
-      <p className="detail-copy detail-copy--long">{entry.body}</p>
+      <p className="detail-copy detail-copy--long" data-active-description>{entry.body}</p>
     </article>
   );
 }
@@ -388,17 +443,17 @@ function ServiceDetail({
   const Icon = iconMap[service.icon];
 
   return (
-    <article className="detail-panel detail-panel--service" aria-label="Modul Detail">
+    <article className="detail-panel detail-panel--service" aria-label="Modul Detail" data-active-detail key={service.id}>
       <div className="detail-header">
         <div className="service-icon service-icon--detail" aria-hidden="true">
           <Icon size={24} strokeWidth={2} />
         </div>
         <div>
           <span>Service Detail</span>
-          <h3>{service.name}</h3>
+          <h3 data-active-title>{service.name}</h3>
         </div>
       </div>
-      <p className="detail-copy">
+      <p className="detail-copy" data-active-description>
         {service.description} Dieses Panel ist für Live-Details und Service-Actions vorbereitet,
         sobald der Dienst seine öffentlichen Metadaten per API bereitstellt. Sichtbar bleiben nur
         freigegebene Statusdaten; Betriebsdetails und interne Routen bleiben serverseitig.
@@ -423,8 +478,51 @@ function ServiceDetail({
   );
 }
 
+function ThemeDock({
+  activeTheme,
+  onThemeChange
+}: {
+  activeTheme: ThemeId;
+  onThemeChange: (theme: ThemeId) => void;
+}) {
+  return (
+    <aside className="theme-dock" aria-label="Theme Auswahl">
+      <div className="theme-dock__label">
+        <SwatchBook size={15} aria-hidden="true" />
+        <span>Theme</span>
+      </div>
+      <div className="theme-dock__chips">
+        {THEMES.map((theme) => (
+          <button
+            aria-label={`Theme ${theme.label} aktivieren`}
+            aria-pressed={activeTheme === theme.id}
+            className={`theme-chip${activeTheme === theme.id ? " is-active" : ""}`}
+            data-theme-choice={theme.id}
+            key={theme.id}
+            onClick={() => onThemeChange(theme.id)}
+            type="button"
+          >
+            <span
+              className="theme-chip__swatch"
+              style={
+                {
+                  "--chip-a": theme.colors[0],
+                  "--chip-b": theme.colors[1]
+                } as React.CSSProperties
+              }
+              aria-hidden="true"
+            />
+            <span>{theme.label}</span>
+          </button>
+        ))}
+      </div>
+    </aside>
+  );
+}
+
 function App() {
   const { snapshot, socketState } = useHealth();
+  const [activeTheme, setActiveTheme] = useState<ThemeId>(() => applyInitialTheme());
   const [activeLogId, setActiveLogId] = useState(logbookEntries[0]!.id);
   const [activeServiceId, setActiveServiceId] = useState<string | null>(null);
   const lastPointerAt = useRef(Date.now());
@@ -438,6 +536,21 @@ function App() {
     [activeServices]
   );
   const activeService = visibleServices.find((service) => service.id === activeServiceId) ?? visibleServices[0];
+
+  function changeTheme(theme: ThemeId) {
+    const update = () => {
+      setActiveTheme(theme);
+      applyTheme(theme);
+    };
+
+    const viewTransitionDocument = document as ViewTransitionDocument;
+    if (viewTransitionDocument.startViewTransition && !prefersReducedMotion()) {
+      viewTransitionDocument.startViewTransition(update);
+      return;
+    }
+
+    update();
+  }
 
   useEffect(() => {
     if (!activeServiceId && visibleServices[0]) {
@@ -456,6 +569,23 @@ function App() {
       window.removeEventListener("mousemove", markPointer);
       window.removeEventListener("pointerdown", markPointer);
       window.removeEventListener("keydown", markPointer);
+    };
+  }, []);
+
+  useEffect(() => {
+    let frame = 0;
+    const trackPointerGlow = (event: PointerEvent) => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        document.documentElement.style.setProperty("--mx", `${event.clientX}px`);
+        document.documentElement.style.setProperty("--my", `${event.clientY}px`);
+      });
+    };
+
+    window.addEventListener("pointermove", trackPointerGlow);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("pointermove", trackPointerGlow);
     };
   }, []);
 
@@ -531,7 +661,7 @@ function App() {
         </div>
 
         <div className="module-layout">
-          <div className="service-grid">
+          <div className="service-grid" data-card-group>
             {services.length > 0 ? (
               visibleServices.map((service) => (
                 <ServiceCard
@@ -554,6 +684,7 @@ function App() {
           <ServiceDetail service={activeService} generatedAt={snapshot?.generatedAt ?? null} />
         </div>
       </section>
+      <ThemeDock activeTheme={activeTheme} onThemeChange={changeTheme} />
     </main>
   );
 }
