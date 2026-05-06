@@ -8,7 +8,7 @@ import {
   RefreshCw,
   ShieldCheck
 } from "lucide-react";
-import { StrictMode, useEffect, useMemo, useState } from "react";
+import { StrictMode, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
@@ -36,7 +36,8 @@ type HealthSnapshot = {
 
 type SocketState = "connecting" | "live" | "fallback";
 const HEALTH_REFRESH_MS = 10000;
-type ActivePanel = { type: "service" | "log"; id: string } | null;
+const IDLE_ROTATION_MS = 6500;
+const POINTER_IDLE_MS = 4800;
 
 const stateLabels: Record<ServiceState, string> = {
   checking: "Prüfung",
@@ -219,14 +220,12 @@ function ServiceCard({
   service,
   generatedAt,
   isActive,
-  onOpen,
-  onToggle
+  onOpen
 }: {
   service: PublicService;
   generatedAt: string | null;
   isActive: boolean;
   onOpen: () => void;
-  onToggle: () => void;
 }) {
   const Icon = iconMap[service.icon];
   const cardClassName = `service-card${isActive ? " service-card--active" : ""}`;
@@ -234,7 +233,7 @@ function ServiceCard({
   return (
     <article
       className={cardClassName}
-      onClick={onToggle}
+      onClick={onOpen}
       onMouseEnter={onOpen}
       onFocus={onOpen}
       tabIndex={0}
@@ -299,30 +298,35 @@ function Wordmark() {
 }
 
 function Logbook({
-  activePanel,
-  onOpen,
-  onToggle
+  activeLogId,
+  onOpen
 }: {
-  activePanel: ActivePanel;
+  activeLogId: string;
   onOpen: (id: string) => void;
-  onToggle: (id: string) => void;
 }) {
+  const activeEntry = (logbookEntries.find((entry) => entry.id === activeLogId) ?? logbookEntries[0])!;
+
   return (
     <section className="logbook" aria-labelledby="logbook-title">
-      <div className="logbook__heading">
-        <span>Mission Log</span>
-        <h2 id="logbook-title">Was passiert ist</h2>
+      <div className="panel-heading">
+        <div>
+          <span>Mission Log</span>
+          <h2 id="logbook-title">Was passiert ist</h2>
+        </div>
+        <small>Autopilot rotiert bei Inaktivität</small>
       </div>
-      <div className="logbook__entries">
-        {logbookEntries.map((entry) => (
-          <LogCard
-            entry={entry}
-            isActive={activePanel?.type === "log" && activePanel.id === entry.id}
-            key={entry.id}
-            onOpen={() => onOpen(entry.id)}
-            onToggle={() => onToggle(entry.id)}
-          />
-        ))}
+      <div className="logbook__layout">
+        <div className="logbook__entries">
+          {logbookEntries.map((entry) => (
+            <LogCard
+              entry={entry}
+              isActive={activeLogId === entry.id}
+              key={entry.id}
+              onOpen={() => onOpen(entry.id)}
+            />
+          ))}
+        </div>
+        <LogDetail entry={activeEntry} />
       </div>
     </section>
   );
@@ -331,13 +335,11 @@ function Logbook({
 function LogCard({
   entry,
   isActive,
-  onOpen,
-  onToggle
+  onOpen
 }: {
   entry: (typeof logbookEntries)[number];
   isActive: boolean;
   onOpen: () => void;
-  onToggle: () => void;
 }) {
   return (
     <article
@@ -346,7 +348,7 @@ function LogCard({
       aria-label={`${entry.title} Details anzeigen`}
       onMouseEnter={onOpen}
       onFocus={onOpen}
-      onClick={onToggle}
+      onClick={onOpen}
     >
       <span>{entry.meta}</span>
       <h3>{entry.title}</h3>
@@ -355,94 +357,77 @@ function LogCard({
   );
 }
 
-function DetailOverlay({
-  activePanel,
-  services,
-  generatedAt,
-  onClose
+function LogDetail({ entry }: { entry: (typeof logbookEntries)[number] }) {
+  return (
+    <article className="detail-panel detail-panel--news" aria-label="News Detail">
+      <div className="detail-header">
+        <div className="service-icon service-icon--detail" aria-hidden="true">
+          <Activity size={24} strokeWidth={2} />
+        </div>
+        <div>
+          <span>{entry.meta}</span>
+          <h3>{entry.title}</h3>
+        </div>
+      </div>
+      <p className="detail-copy detail-copy--long">{entry.body}</p>
+    </article>
+  );
+}
+
+function ServiceDetail({
+  service,
+  generatedAt
 }: {
-  activePanel: ActivePanel;
-  services: PublicService[];
+  service: PublicService | undefined;
   generatedAt: string | null;
-  onClose: () => void;
 }) {
-  if (!activePanel) {
+  if (!service) {
     return null;
   }
 
-  const service = activePanel.type === "service" ? services.find((item) => item.id === activePanel.id) : undefined;
-  const logEntry = activePanel.type === "log" ? logbookEntries.find((entry) => entry.id === activePanel.id) : undefined;
-  const Icon = service ? iconMap[service.icon] : Activity;
+  const Icon = iconMap[service.icon];
 
   return (
-    <div className="detail-overlay" onClick={onClose} onMouseLeave={onClose}>
-      <section className="detail-dialog" aria-label="Detailansicht" onClick={onClose}>
-        {service ? (
-          <>
-            <div className="detail-header">
-              <div className="service-icon service-icon--detail" aria-hidden="true">
-                <Icon size={26} strokeWidth={2} />
-              </div>
-              <div>
-                <span>Service Detail</span>
-                <h3>{service.name}</h3>
-              </div>
-            </div>
-            <div className="detail-scroll">
-              <p className="detail-copy">
-                {service.description} Dieses Panel ist für Live-Details und Service-Actions vorbereitet,
-                sobald der Dienst seine öffentlichen Metadaten per API bereitstellt. Sichtbar bleiben nur
-                freigegebene Statusdaten; Betriebsdetails und interne Routen bleiben serverseitig.
-              </p>
-              <div className="detail-metrics">
-                <span>Status: {stateLabels[service.state]}</span>
-                <span>Update: {formatTime(service.updatedAt)}</span>
-                <span>{service.responseMs !== null ? `Antwort: ${service.responseMs} ms` : service.message}</span>
-              </div>
-              <RefreshCountdown generatedAt={generatedAt} />
-            </div>
-            <div className="service-actions" aria-label={`${service.name} Aktionen`}>
-              {service.href ? (
-                <a className="service-card__link" href={service.href} onClick={(event) => event.stopPropagation()}>
-                  Öffnen
-                  <ArrowUpRight size={17} aria-hidden="true" />
-                </a>
-              ) : (
-                <span className="service-card__disabled">Noch nicht verfügbar</span>
-              )}
-            </div>
-          </>
-        ) : null}
-
-        {logEntry ? (
-          <>
-            <div className="detail-header">
-              <div className="service-icon service-icon--detail" aria-hidden="true">
-                <Activity size={26} strokeWidth={2} />
-              </div>
-              <div>
-                <span>{logEntry.meta}</span>
-                <h3>{logEntry.title}</h3>
-              </div>
-            </div>
-            <div className="detail-scroll">
-              <p className="detail-copy detail-copy--long">{logEntry.body}</p>
-            </div>
-            <div className="service-actions">
-              <button className="service-card__link" type="button" onClick={onClose}>
-                Schließen
-              </button>
-            </div>
-          </>
-        ) : null}
-      </section>
-    </div>
+    <article className="detail-panel detail-panel--service" aria-label="Modul Detail">
+      <div className="detail-header">
+        <div className="service-icon service-icon--detail" aria-hidden="true">
+          <Icon size={24} strokeWidth={2} />
+        </div>
+        <div>
+          <span>Service Detail</span>
+          <h3>{service.name}</h3>
+        </div>
+      </div>
+      <p className="detail-copy">
+        {service.description} Dieses Panel ist für Live-Details und Service-Actions vorbereitet,
+        sobald der Dienst seine öffentlichen Metadaten per API bereitstellt. Sichtbar bleiben nur
+        freigegebene Statusdaten; Betriebsdetails und interne Routen bleiben serverseitig.
+      </p>
+      <div className="detail-metrics">
+        <span>Status: {stateLabels[service.state]}</span>
+        <span>Update: {formatTime(service.updatedAt)}</span>
+        <span>{service.responseMs !== null ? `Antwort: ${service.responseMs} ms` : service.message}</span>
+      </div>
+      <RefreshCountdown generatedAt={generatedAt} />
+      <div className="service-actions" aria-label={`${service.name} Aktionen`}>
+        {service.href ? (
+          <a className="service-card__link" href={service.href}>
+            Öffnen
+            <ArrowUpRight size={17} aria-hidden="true" />
+          </a>
+        ) : (
+          <span className="service-card__disabled">Noch nicht verfügbar</span>
+        )}
+      </div>
+    </article>
   );
 }
 
 function App() {
   const { snapshot, socketState } = useHealth();
-  const [activePanel, setActivePanel] = useState<ActivePanel>(null);
+  const [activeLogId, setActiveLogId] = useState(logbookEntries[0]!.id);
+  const [activeServiceId, setActiveServiceId] = useState<string | null>(null);
+  const lastPointerAt = useRef(Date.now());
   const services = snapshot?.services ?? [];
   const activeServices = services.filter((service) => service.state !== "planned");
   const plannedServices = services.filter((service) => service.state === "planned");
@@ -452,12 +437,48 @@ function App() {
     () => activeServices.filter((service) => service.state === "online").length,
     [activeServices]
   );
-  const setPanel = (panel: ActivePanel) => setActivePanel(panel);
-  const togglePanel = (panel: Exclude<ActivePanel, null>) => {
-    setActivePanel((current) =>
-      current?.type === panel.type && current.id === panel.id ? null : panel
-    );
-  };
+  const activeService = visibleServices.find((service) => service.id === activeServiceId) ?? visibleServices[0];
+
+  useEffect(() => {
+    if (!activeServiceId && visibleServices[0]) {
+      setActiveServiceId(visibleServices[0].id);
+    }
+  }, [activeServiceId, visibleServices]);
+
+  useEffect(() => {
+    const markPointer = () => {
+      lastPointerAt.current = Date.now();
+    };
+    window.addEventListener("mousemove", markPointer);
+    window.addEventListener("pointerdown", markPointer);
+    window.addEventListener("keydown", markPointer);
+    return () => {
+      window.removeEventListener("mousemove", markPointer);
+      window.removeEventListener("pointerdown", markPointer);
+      window.removeEventListener("keydown", markPointer);
+    };
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (Date.now() - lastPointerAt.current < POINTER_IDLE_MS) {
+        return;
+      }
+      setActiveLogId((current) => {
+        const index = Math.max(0, logbookEntries.findIndex((entry) => entry.id === current));
+        return logbookEntries[(index + 1) % logbookEntries.length]!.id;
+      });
+      setActiveServiceId((current) => {
+        if (visibleServices.length === 0) {
+          return current;
+        }
+        const index = Math.max(0, visibleServices.findIndex((service) => service.id === current));
+        return visibleServices[(index + 1) % visibleServices.length]?.id ?? current;
+      });
+    }, IDLE_ROTATION_MS);
+
+    return () => window.clearInterval(timer);
+  }, [visibleServices]);
 
   return (
     <main>
@@ -497,47 +518,42 @@ function App() {
       </section>
 
       <Logbook
-        activePanel={activePanel}
-        onOpen={(id) => setPanel({ type: "log", id })}
-        onToggle={(id) => togglePanel({ type: "log", id })}
+        activeLogId={activeLogId}
+        onOpen={setActiveLogId}
       />
 
       <section className="section-block" aria-labelledby="services-title">
-        <div className="section-heading">
+        <div className="panel-heading">
           <div>
             <h2 id="services-title">Module</h2>
             <p>Schnelle Einstiege, klickbereit während jeder Animation.</p>
           </div>
         </div>
 
-        <div className="service-grid">
-          {services.length > 0 ? (
-            visibleServices.map((service) => (
-              <ServiceCard
-                key={service.id}
-                service={service}
-                generatedAt={snapshot?.generatedAt ?? null}
-                isActive={activePanel?.type === "service" && activePanel.id === service.id}
-                onOpen={() => setPanel({ type: "service", id: service.id })}
-                onToggle={() => togglePanel({ type: "service", id: service.id })}
-              />
-            ))
-          ) : (
-            <>
-              <div className="skeleton" />
-              <div className="skeleton" />
-              <div className="skeleton" />
-              <div className="skeleton" />
-            </>
-          )}
+        <div className="module-layout">
+          <div className="service-grid">
+            {services.length > 0 ? (
+              visibleServices.map((service) => (
+                <ServiceCard
+                  key={service.id}
+                  service={service}
+                  generatedAt={snapshot?.generatedAt ?? null}
+                  isActive={activeService?.id === service.id}
+                  onOpen={() => setActiveServiceId(service.id)}
+                />
+              ))
+            ) : (
+              <>
+                <div className="skeleton" />
+                <div className="skeleton" />
+                <div className="skeleton" />
+                <div className="skeleton" />
+              </>
+            )}
+          </div>
+          <ServiceDetail service={activeService} generatedAt={snapshot?.generatedAt ?? null} />
         </div>
       </section>
-      <DetailOverlay
-        activePanel={activePanel}
-        services={services}
-        generatedAt={snapshot?.generatedAt ?? null}
-        onClose={() => setPanel(null)}
-      />
     </main>
   );
 }

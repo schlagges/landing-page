@@ -1,32 +1,25 @@
 import { expect, test } from "@playwright/test";
 
-test("service card opens details on hover and closes on mouse leave", async ({ page }) => {
+test("service card updates the fixed module detail panel on hover", async ({ page }) => {
   await page.goto("/");
 
   const card = page.getByLabel("Voice Details anzeigen");
   const shell = card.locator(".service-card__shell");
   await expect(card).toBeVisible();
-  await expect(page.getByLabel("Detailansicht")).toBeHidden();
+  const detail = page.getByLabel("Modul Detail");
+  await expect(detail).toBeVisible();
   const initialBox = await shell.boundingBox();
   expect(initialBox).not.toBeNull();
 
   await card.hover();
-  const dialog = page.getByLabel("Detailansicht");
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByText("Service Detail")).toBeVisible();
-  await expect(dialog.getByRole("link", { name: /Öffnen/i })).toBeVisible();
-  const detailBox = await dialog.boundingBox();
+  await expect(detail.getByText("Service Detail")).toBeVisible();
+  await expect(detail.getByRole("link", { name: /Öffnen/i })).toBeVisible();
+  const detailBox = await detail.boundingBox();
   expect(detailBox).not.toBeNull();
   expect(detailBox!.width).toBeGreaterThan(initialBox!.width * 1.5);
-  expect(detailBox!.height).toBeGreaterThan(initialBox!.height * 1.5);
 
-  await dialog.click({ position: { x: 24, y: 24 } });
-  await expect(dialog).toBeHidden();
-
-  await card.click();
-  await expect(dialog).toBeVisible();
-  await dialog.click({ position: { x: 24, y: 24 } });
-  await expect(dialog).toBeHidden();
+  await page.getByLabel("Auth / SSO Details anzeigen").hover();
+  await expect(detail.getByRole("heading", { name: "Auth / SSO" })).toBeVisible();
 });
 
 test("service cards show a reverse refresh countdown", async ({ page }) => {
@@ -76,11 +69,14 @@ test("logbook is prominent above modules", async ({ page }) => {
   await page.goto("/");
 
   const logbook = page.locator(".logbook");
+  const entries = logbook.locator(".logbook__entries");
+  const newsDetail = page.getByLabel("News Detail");
   await expect(logbook).toBeVisible();
   await expect(logbook.getByRole("heading", { name: "Was passiert ist" })).toBeVisible();
-  await expect(logbook.getByText("Portal online")).toBeVisible();
-  await expect(logbook.getByText("HUD Interface aktiviert")).toBeVisible();
-  await expect(logbook.getByText("Service Panels erweitert")).toBeVisible();
+  await expect(entries.getByText("Portal online")).toBeVisible();
+  await expect(entries.getByText("HUD Interface aktiviert")).toBeVisible();
+  await expect(entries.getByText("Service Panels erweitert")).toBeVisible();
+  await expect(newsDetail.getByText("Das Portal ist der sichtbare Einstiegspunkt")).toBeVisible();
 
   const logbookBox = await logbook.boundingBox();
   const modulesBox = await page.getByRole("heading", { name: "Module" }).boundingBox();
@@ -89,7 +85,34 @@ test("logbook is prominent above modules", async ({ page }) => {
   expect(logbookBox!.y).toBeLessThan(modulesBox!.y);
 
   await logbook.getByLabel("Portal online Details anzeigen").hover();
-  const dialog = page.getByLabel("Detailansicht");
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByText("Das Portal ist der sichtbare Einstiegspunkt")).toBeVisible();
+  await expect(newsDetail.getByText("Das Portal ist der sichtbare Einstiegspunkt")).toBeVisible();
+
+  await logbook.getByLabel("HUD Interface aktiviert Details anzeigen").hover();
+  await expect(newsDetail.getByText("Das Interface wurde von einer klassischen Landing Page")).toBeVisible();
+});
+
+test("desktop start screen does not require page scrolling", async ({ page }) => {
+  await page.goto("/");
+
+  const overflow = await page.evaluate(() => ({
+    body: document.body.scrollHeight,
+    document: document.documentElement.scrollHeight,
+    viewport: window.innerHeight
+  }));
+
+  expect(Math.max(overflow.body, overflow.document)).toBeLessThanOrEqual(overflow.viewport + 1);
+});
+
+test("idle autopilot rotates news and module details", async ({ page }) => {
+  await page.goto("/");
+
+  const newsDetail = page.getByLabel("News Detail");
+  const moduleDetail = page.getByLabel("Modul Detail");
+  const initialNews = await newsDetail.getByRole("heading").textContent();
+  const initialModule = await moduleDetail.getByRole("heading").textContent();
+
+  await page.waitForTimeout(7200);
+
+  await expect(newsDetail.getByRole("heading")).not.toHaveText(initialNews ?? "");
+  await expect(moduleDetail.getByRole("heading")).not.toHaveText(initialModule ?? "");
 });
