@@ -41,6 +41,14 @@ test("service info OpenAPI and aggregation endpoints are available", async ({ pa
   const serviceInfo = await serviceInfoResponse.json();
   expect(Array.isArray(serviceInfo.services)).toBe(true);
   expect(serviceInfo.services.some((service: { serviceId: string }) => service.serviceId === "voice")).toBe(true);
+
+  const healthResponse = await page.request.get("/api/health");
+  expect(healthResponse.ok()).toBe(true);
+  const health = await healthResponse.json();
+  expect(Array.isArray(health.services)).toBe(true);
+  const gitlab = health.services.find((service: { id: string; href: string | null }) => service.id === "gitlab");
+  expect(gitlab).toBeTruthy();
+  expect(gitlab?.href).toBe("https://labs.schnick-schnack.info/schnick-schnack/landing-page");
 });
 
 test("service cards show a reverse refresh countdown", async ({ page }) => {

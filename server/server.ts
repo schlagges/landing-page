@@ -150,8 +150,9 @@ const targets: HealthTarget[] = [
     name: "GitLab",
     category: "roadmap",
     icon: "gitlab",
-    href: null,
-    description: "Code- und Projektplattform ist für eine spätere Erweiterung vorgesehen.",
+    href: "https://labs.schnick-schnack.info/schnick-schnack/landing-page",
+    description: "Code- und Projektplattform für die schnick-schnack-Projekte.",
+    url: process.env.HEALTH_GITLAB_URL ?? "https://labs.schnick-schnack.info/schnick-schnack/landing-page",
     infoUrl: null
   }
 ];
