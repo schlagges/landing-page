@@ -621,7 +621,7 @@ function TopBar({
       </span>
       <button className="system-status-button" onClick={onStatusClick} type="button">
         <SlidersHorizontal size={17} aria-hidden="true" />
-        Systemstatus
+        Status ansehen
       </button>
       <a className="login-primary" href={loginHref(activeTheme)}>
         <UserRound size={19} aria-hidden="true" />
