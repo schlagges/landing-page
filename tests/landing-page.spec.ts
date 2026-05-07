@@ -294,3 +294,38 @@ test("layout dock offers distinct display systems and services receive design pa
   expect(design.layouts).toContain("data-core");
   expect(design.storage.theme).toBe("schnick-schnack.theme");
 });
+
+test("themes and layouts remain independently combinable", async ({ page }) => {
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Theme Amber Terminal aktivieren" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "amber-terminal");
+  const amberAccent = await page.locator("html").evaluate((element) => getComputedStyle(element).getPropertyValue("--accent").trim());
+  expect(amberAccent).toBe("255, 199, 92");
+
+  for (const layout of ["Orbital Command", "Cyberpunk Terminal", "Glass Ops", "Tactical Grid", "Data Core"]) {
+    await page.getByRole("button", { name: `Layout ${layout} aktivieren` }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "amber-terminal");
+    const activeAccent = await page.locator("html").evaluate((element) => getComputedStyle(element).getPropertyValue("--accent").trim());
+    expect(activeAccent).toBe(amberAccent);
+  }
+});
+
+test("all desktop layouts keep primary regions visible without page scrolling", async ({ page }) => {
+  await page.goto("/");
+
+  for (const layout of ["HUD Command", "Orbital Command", "Cyberpunk Terminal", "Glass Ops", "Tactical Grid", "Data Core"]) {
+    await page.getByRole("button", { name: `Layout ${layout} aktivieren` }).click();
+    await expect(page.getByLabel("Slack Kanal")).toBeVisible();
+    await expect(page.getByLabel("Chat Detail")).toBeVisible();
+    await expect(page.getByLabel("Modul Detail")).toBeVisible();
+
+    const overflow = await page.evaluate(() => ({
+      body: document.body.scrollHeight,
+      document: document.documentElement.scrollHeight,
+      viewport: window.innerHeight
+    }));
+
+    expect(Math.max(overflow.body, overflow.document)).toBeLessThanOrEqual(overflow.viewport + 1);
+  }
+});

@@ -175,82 +175,31 @@ html[data-theme="ghost-glass"] {
 html[data-layout="orbital-command"] {
   --radius: 999px;
   --radius-card: 18px;
-  --bg-top: #061321;
-  --bg-bottom: #020611;
-  --panel: rgba(5, 18, 31, 0.7);
-  --panel-strong: rgba(9, 31, 50, 0.92);
-  --accent: 82, 222, 255;
-  --accent-2: 255, 72, 119;
-  --ambient: rgba(82, 222, 255, 0.2);
-  --grid-opacity: 0.06;
+  --layout-density: 0.92;
 }
 
 html[data-layout="cyberpunk-terminal"] {
   --radius: 3px;
   --radius-card: 4px;
-  --bg-top: #160817;
-  --bg-bottom: #050205;
-  --panel: rgba(24, 8, 21, 0.78);
-  --panel-strong: rgba(38, 10, 34, 0.96);
-  --text: #fff8e7;
-  --muted: #d3a9c8;
-  --quiet: #9e718d;
-  --accent: 255, 215, 78;
-  --accent-2: 255, 42, 128;
-  --ambient: rgba(255, 42, 128, 0.24);
-  --grid-opacity: 0.095;
-  --scan-opacity: 0.18;
+  --layout-density: 0.78;
 }
 
 html[data-layout="glass-ops"] {
   --radius: 16px;
   --radius-card: 18px;
-  --bg-top: #0b1623;
-  --bg-bottom: #030a13;
-  --panel: rgba(210, 235, 255, 0.105);
-  --panel-strong: rgba(186, 219, 255, 0.16);
-  --text: #f7fbff;
-  --muted: #bed1df;
-  --quiet: #8ea4b6;
-  --accent: 166, 230, 255;
-  --accent-2: 247, 251, 255;
-  --ambient: rgba(166, 230, 255, 0.19);
-  --grid-opacity: 0.035;
-  --scan-opacity: 0.055;
+  --layout-density: 1;
 }
 
 html[data-layout="tactical-grid"] {
   --radius: 0;
   --radius-card: 2px;
-  --bg-top: #101206;
-  --bg-bottom: #030401;
-  --panel: rgba(16, 19, 7, 0.8);
-  --panel-strong: rgba(31, 33, 11, 0.95);
-  --text: #f3ffd9;
-  --muted: #c3c995;
-  --quiet: #83885b;
-  --accent: 214, 255, 80;
-  --accent-2: 255, 112, 54;
-  --ambient: rgba(214, 255, 80, 0.16);
-  --grid-opacity: 0.11;
-  --scan-opacity: 0.14;
+  --layout-density: 0.82;
 }
 
 html[data-layout="data-core"] {
   --radius: 10px;
   --radius-card: 12px;
-  --bg-top: #0f0922;
-  --bg-bottom: #02030d;
-  --panel: rgba(12, 10, 31, 0.76);
-  --panel-strong: rgba(24, 18, 54, 0.94);
-  --text: #f8f3ff;
-  --muted: #c4b6d9;
-  --quiet: #8f80a9;
-  --accent: 116, 245, 255;
-  --accent-2: 221, 91, 255;
-  --ambient: rgba(221, 91, 255, 0.2);
-  --grid-opacity: 0.07;
-  --scan-opacity: 0.1;
+  --layout-density: 0.86;
 }
 
 * {
@@ -1990,7 +1939,20 @@ html[data-layout="orbital-command"] .status-panel {
 
 html[data-layout="orbital-command"] .logbook__layout,
 html[data-layout="orbital-command"] .module-layout {
-  grid-template-columns: 0.72fr 1fr;
+  grid-template-columns: minmax(172px, 0.44fr) minmax(0, 1fr);
+}
+
+html[data-layout="orbital-command"] .logbook__entries,
+html[data-layout="orbital-command"] .service-grid {
+  grid-template-columns: 1fr;
+}
+
+html[data-layout="orbital-command"] .log-entry {
+  min-height: 78px;
+}
+
+html[data-layout="orbital-command"] .service-card__face {
+  min-height: 124px;
 }
 
 html[data-layout="orbital-command"] .service-card,
@@ -2012,6 +1974,16 @@ html[data-layout="cyberpunk-terminal"] .hero {
   background:
     repeating-linear-gradient(90deg, rgba(var(--accent), 0.045) 0 1px, transparent 1px 18px),
     rgba(0, 0, 0, 0.16);
+}
+
+html[data-layout="cyberpunk-terminal"] .eyebrow,
+html[data-layout="cyberpunk-terminal"] .domain-label,
+html[data-layout="cyberpunk-terminal"] h2,
+html[data-layout="cyberpunk-terminal"] h3,
+html[data-layout="cyberpunk-terminal"] .panel-heading span,
+html[data-layout="cyberpunk-terminal"] .log-entry span {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  letter-spacing: 0.06em;
 }
 
 html[data-layout="cyberpunk-terminal"] .status-panel {
@@ -2038,6 +2010,27 @@ html[data-layout="cyberpunk-terminal"] .service-grid {
 
 html[data-layout="cyberpunk-terminal"] .module-layout {
   grid-template-columns: minmax(0, 1fr) minmax(330px, 0.82fr);
+}
+
+html[data-layout="cyberpunk-terminal"] .logbook__layout {
+  grid-template-columns: 0.72fr minmax(0, 1fr);
+}
+
+html[data-layout="cyberpunk-terminal"] .logbook__entries {
+  grid-template-columns: 1fr;
+}
+
+html[data-layout="cyberpunk-terminal"] .service-card__face {
+  min-height: 162px;
+  padding: 10px;
+}
+
+html[data-layout="cyberpunk-terminal"] .detail-panel,
+html[data-layout="cyberpunk-terminal"] .service-card__shell,
+html[data-layout="cyberpunk-terminal"] .log-entry {
+  box-shadow:
+    6px 6px 0 rgba(var(--accent-2), 0.18),
+    0 14px 34px rgba(0, 0, 0, 0.34);
 }
 
 html[data-layout="glass-ops"] body::before {
@@ -2071,6 +2064,24 @@ html[data-layout="glass-ops"] .service-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+html[data-layout="glass-ops"] .logbook__layout,
+html[data-layout="glass-ops"] .module-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+html[data-layout="glass-ops"] .logbook__entries {
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(176px, 1fr);
+  grid-template-columns: none;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+
+html[data-layout="glass-ops"] .detail-panel {
+  min-height: 260px;
+}
+
 html[data-layout="tactical-grid"] body::before {
   background:
     radial-gradient(260px circle at var(--mx) var(--my), rgba(var(--accent), 0.1), transparent 58%),
@@ -2100,6 +2111,30 @@ html[data-layout="tactical-grid"] .section-block,
 html[data-layout="tactical-grid"] .status-panel,
 html[data-layout="tactical-grid"] .detail-panel {
   clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
+}
+
+html[data-layout="tactical-grid"] .logbook__layout {
+  grid-template-columns: 1fr;
+}
+
+html[data-layout="tactical-grid"] .module-layout {
+  grid-template-columns: minmax(0, 0.58fr) minmax(0, 1fr);
+}
+
+html[data-layout="tactical-grid"] .logbook__entries {
+  grid-template-columns: 1fr;
+}
+
+html[data-layout="tactical-grid"] .service-grid {
+  grid-template-columns: 1fr;
+}
+
+html[data-layout="tactical-grid"] .service-card__face {
+  min-height: 118px;
+}
+
+html[data-layout="tactical-grid"] .log-entry p {
+  display: -webkit-box;
 }
 
 html[data-layout="data-core"] .hero {
@@ -2134,6 +2169,19 @@ html[data-layout="data-core"] .module-layout {
 html[data-layout="data-core"] .logbook__entries,
 html[data-layout="data-core"] .service-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+html[data-layout="data-core"] .detail-panel {
+  min-height: 0;
+}
+
+html[data-layout="data-core"] .detail-copy {
+  max-width: none;
+}
+
+html[data-layout="data-core"] .service-info-zone,
+html[data-layout="data-core"] .service-info-metrics {
+  grid-template-columns: 1fr;
 }
 
 :focus-visible {
