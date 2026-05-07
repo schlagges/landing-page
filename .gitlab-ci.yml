@@ -27,7 +27,8 @@ deploy_prod:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
   script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - rsync -a --delete --exclude ".env" --exclude ".git" --exclude "node_modules" --exclude "dist" --exclude "test-results" --exclude "playwright-report" ./ /opt/stacks/landing-page/
     - cd /opt/stacks/landing-page
-    - docker compose pull landing-page
-    - docker compose up -d landing-page
+    - LANDING_PAGE_IMAGE="$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA" docker compose pull landing-page
+    - LANDING_PAGE_IMAGE="$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA" docker compose up -d landing-page
     - docker image prune -f

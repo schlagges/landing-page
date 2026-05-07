@@ -1,5 +1,6 @@
 services:
   landing-page:
+    image: ${LANDING_PAGE_IMAGE:-landing-page-landing-page}
     build: .
     container_name: landing-page
     network_mode: host
