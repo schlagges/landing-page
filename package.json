@@ -10,7 +10,9 @@
     "dev": "vite --host 0.0.0.0",
     "lint": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
     "start": "node dist/server/server.js",
-    "test:ui": "playwright test"
+    "test:ui": "playwright test",
+    "ui-review": "node scripts/ui-review-project.mjs landing-page",
+    "ui-review:landing-page": "node scripts/ui-review-project.mjs landing-page"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.4",
