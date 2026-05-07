@@ -483,10 +483,15 @@ function ServiceInfoSections({ sections }: { sections: NonNullable<ServiceInfo["
 }
 
 function formatFeedTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "--:--";
+  }
+
   return new Intl.DateTimeFormat("de-DE", {
     hour: "2-digit",
     minute: "2-digit"
-  }).format(new Date(value));
+  }).format(date);
 }
 
 const fallbackSlackFeed: ServiceFeed = {
@@ -536,6 +541,36 @@ function SlackChannelPreview({ feed }: { feed?: ServiceFeed }) {
           </article>
         ))}
       </div>
+    </section>
+  );
+}
+
+function SlackPageChannel({ feed }: { feed?: ServiceFeed }) {
+  const activeFeed = feed ?? fallbackSlackFeed;
+  const latestItem = activeFeed.items[0];
+  const channelUrl = activeFeed.href ?? fallbackSlackFeed.href;
+
+  return (
+    <section className="page-channel" aria-label="Slack Kanal">
+      <div className="page-channel__title">
+        <Slack size={16} aria-hidden="true" />
+        <span>Channel</span>
+        <strong>{activeFeed.title}</strong>
+      </div>
+      <p>
+        {latestItem ? (
+          <>
+            <span>{latestItem.author} / {formatFeedTime(latestItem.createdAt)}</span>
+            {latestItem.text}
+          </>
+        ) : (
+          "Channel-Bridge wartet auf freigegebene Nachrichten."
+        )}
+      </p>
+      <a href={channelUrl}>
+        Öffnen
+        <ArrowUpRight size={15} aria-hidden="true" />
+      </a>
     </section>
   );
 }
@@ -847,6 +882,7 @@ function App() {
     () => new Map((serviceInfoSnapshot?.services ?? []).map((serviceInfo) => [serviceInfo.serviceId, serviceInfo])),
     [serviceInfoSnapshot]
   );
+  const slackPageFeed = serviceInfoById.get("slack")?.data?.feeds?.[0];
 
   function changeTheme(theme: ThemeId) {
     const update = () => {
@@ -955,6 +991,7 @@ function App() {
           <RefreshCw size={17} aria-hidden="true" className={socketState === "live" ? "spin-soft" : ""} />
           <span>{socketState === "live" ? "Live per WebSocket" : "Fallback per Abfrage"}</span>
         </div>
+        <SlackPageChannel feed={slackPageFeed} />
         <span>Letzte Aktualisierung: {formatTime(snapshot?.generatedAt ?? null)}</span>
       </section>
 

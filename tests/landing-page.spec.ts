@@ -84,8 +84,11 @@ test("live status is presented as a HUD card", async ({ page }) => {
   await page.goto("/");
 
   const liveStatus = page.getByLabel("Live Aktualisierung");
+  const channel = page.getByLabel("Slack Kanal");
   await expect(liveStatus).toBeVisible();
   await expect(liveStatus).toContainText(/Live per WebSocket|Fallback per Abfrage/);
+  await expect(channel).toBeVisible();
+  await expect(channel.getByText("#general")).toBeVisible();
 
   const borderRadius = await liveStatus.evaluate((element) => getComputedStyle(element).borderRadius);
   const background = await liveStatus.evaluate((element) => getComputedStyle(element).backgroundImage);
