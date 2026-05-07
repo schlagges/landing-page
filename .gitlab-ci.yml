@@ -28,6 +28,7 @@ ui_review_landing_page:
   image: mcr.microsoft.com/playwright:v1.57.0-noble
   stage: test
   script:
+    - npm exec -- playwright install chromium
     - npm run ui-review
   artifacts:
     when: always
