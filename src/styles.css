@@ -302,13 +302,21 @@ main {
   max-width: 760px;
 }
 
+.hero__controls {
+  display: grid;
+  gap: 8px;
+}
+
 .eyebrow,
 .live-strip,
 .service-card__meta,
 .status-panel,
 .status-panel > div,
 .service-card__topline,
-.service-card__link {
+.service-card__link,
+.language-switch,
+.language-switch > span,
+.language-switch > div {
   display: flex;
   align-items: center;
 }
@@ -423,6 +431,58 @@ p {
 .status-panel span:last-child {
   color: var(--muted);
   font-size: 13px;
+}
+
+.language-switch {
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 38px;
+  padding: 6px 8px 6px 10px;
+  border: 1px solid rgba(var(--accent), 0.26);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.052), transparent 48%),
+    rgba(0, 0, 0, 0.24);
+  color: var(--muted);
+  backdrop-filter: blur(14px);
+}
+
+.language-switch > span {
+  gap: 7px;
+  min-width: 0;
+  color: rgb(var(--accent));
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.language-switch > div {
+  gap: 5px;
+  flex: 0 0 auto;
+}
+
+.language-switch button {
+  min-width: 38px;
+  min-height: 26px;
+  padding: 4px 8px;
+  border: 1px solid rgba(var(--accent), 0.24);
+  border-radius: calc(var(--radius) - 1px);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.language-switch button:hover,
+.language-switch button:focus-visible,
+.language-switch button.is-active {
+  border-color: rgba(var(--accent), 0.72);
+  color: var(--text);
+  box-shadow: 0 0 18px rgba(var(--accent), 0.16);
 }
 
 .status-dot {
