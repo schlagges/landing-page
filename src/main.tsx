@@ -1,27 +1,37 @@
 import {
-  Activity,
   ArrowUpRight,
+  CheckCircle2,
+  CircleGauge,
   Clock3,
+  FileText,
   GitBranch,
+  Hash,
   Mic2,
-  RadioTower,
+  Moon,
   RefreshCw,
   ShieldCheck,
-  SwatchBook,
-  Languages
+  Slack,
+  SlidersHorizontal,
+  Sun,
+  UserRound
 } from "lucide-react";
-import { StrictMode, useEffect, useMemo, useRef, useState } from "react";
+import { StrictMode, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
 type ServiceState = "online" | "degraded" | "offline" | "checking" | "planned";
-type ServiceCategory = "communication" | "identity" | "realtime" | "roadmap";
+type ServiceCategory = "communication" | "identity" | "development" | "roadmap";
+type ServiceInfoState = "checking" | "available" | "unsupported" | "error" | "planned";
+type ThemeId = (typeof THEMES)[number]["id"];
+type NavSection = "overview" | "systems" | "channels" | "status" | "news";
+type SocketState = "connecting" | "live" | "fallback";
+type RowTone = "green" | "blue" | "violet" | "amber";
 
 type PublicService = {
   id: string;
   name: string;
   category: ServiceCategory;
-  icon: "mic" | "shield" | "radio" | "gitlab";
+  icon: "mic" | "shield" | "gitlab" | "slack";
   href: string | null;
   description: string;
   state: ServiceState;
@@ -37,8 +47,6 @@ type HealthSnapshot = {
   overall: Exclude<ServiceState, "planned">;
   services: PublicService[];
 };
-
-type ServiceInfoState = "checking" | "available" | "unsupported" | "error" | "planned";
 
 type ServiceMetric = {
   id: string;
@@ -62,6 +70,21 @@ type ServiceAction = {
   kind?: "primary" | "secondary" | "danger";
 };
 
+type ServiceFeedItem = {
+  id: string;
+  author: string;
+  text: string;
+  createdAt: string;
+  href?: string;
+};
+
+type ServiceFeed = {
+  id: string;
+  title: string;
+  href?: string;
+  items: ServiceFeedItem[];
+};
+
 type ServiceInfo = {
   schemaVersion: "1.0";
   serviceId: string;
@@ -71,6 +94,7 @@ type ServiceInfo = {
   charts?: ServiceChart[];
   actions?: ServiceAction[];
   sections?: Array<{ id: string; title: string; body: string }>;
+  feeds?: ServiceFeed[];
 };
 
 type ServiceInfoResult = {
@@ -87,262 +111,55 @@ type ServiceInfoSnapshot = {
   services: ServiceInfoResult[];
 };
 
-type SocketState = "connecting" | "live" | "fallback";
-type Language = "de" | "en";
-const HEALTH_REFRESH_MS = 10000;
-const IDLE_ROTATION_MS = 6500;
-const POINTER_IDLE_MS = 4800;
-const HOVER_INTENT_MS = 360;
-const STORAGE_KEY = "schnick-schnack.theme";
-const LANGUAGE_STORAGE_KEY = "schnick-schnack.language";
-const DEFAULT_THEME = "crimson-command";
-const DEFAULT_LANGUAGE: Language = "de";
-const THEMES = [
-  { id: "crimson-command", label: "Crimson Command", colors: ["#6ffdf0", "#ff566f"] },
-  { id: "neon-ice", label: "Neon Ice", colors: ["#8be1ff", "#e6faff"] },
-  { id: "violet-warp", label: "Violet Warp", colors: ["#b770ff", "#ff56d3"] },
-  { id: "amber-terminal", label: "Amber Terminal", colors: ["#ffc75c", "#ff5f52"] },
-  { id: "bio-matrix", label: "Bio Matrix", colors: ["#61ff8b", "#d5ff63"] },
-  { id: "solar-flare", label: "Solar Flare", colors: ["#ffe27a", "#ff3d2e"] },
-  { id: "deep-ocean", label: "Deep Ocean", colors: ["#3fe8ff", "#3264ff"] },
-  { id: "ghost-glass", label: "Ghost Glass", colors: ["#f7fbff", "#8aa7ff"] }
-] as const;
-
-type ThemeId = (typeof THEMES)[number]["id"];
-type LocalizedText = Record<Language, string>;
 type ViewTransitionDocument = Document & {
   startViewTransition?: (callback: () => void) => void;
 };
 
-const translations = {
-  de: {
-    aria: {
-      languageSelection: "Sprachauswahl",
-      serviceActions: "Aktionen",
-      serviceDetails: "Details anzeigen",
-      moduleDetail: "Modul Detail",
-      newsDetail: "News Detail",
-      overallStatus: "Gesamtstatus",
-      liveUpdates: "Live Aktualisierung",
-      themeSelection: "Theme Auswahl"
-    },
-    detail: {
-      actions: "Aktionen",
-      emptyInfo:
-        "Service-Info-API wird geprüft. Dienste können den öffentlichen Info-Endpunkt später implementieren.",
-      intro:
-        "Dieses Panel ist für Live-Details und Service-Actions vorbereitet, sobald der Dienst seine öffentlichen Metadaten per API bereitstellt. Sichtbar bleiben nur freigegebene Statusdaten; Betriebsdetails und interne Routen bleiben serverseitig.",
-      label: "Service Detail",
-      metrics: "Service Kennzahlen",
-      notAvailable: "Noch nicht verfügbar",
-      open: "Öffnen",
-      response: "Antwort",
-      status: "Status",
-      update: "Update"
-    },
-    hero: {
-      eyebrow: "COMMAND DISPLAY / PUBLIC SERVICES",
-      text: "Systemzugriff auf verfügbare Dienste. Live-Status aktiv, öffentliche Telemetrie reduziert auf Verfügbarkeit."
-    },
-    language: {
-      label: "Sprache",
-      options: {
-        de: "Deutsch",
-        en: "English"
-      },
-      switchTo: {
-        de: "Deutsch aktivieren",
-        en: "Englisch aktivieren"
-      }
-    },
-    live: {
-      fallback: "Fallback per Abfrage",
-      lastUpdate: "Letzte Aktualisierung",
-      live: "Live per WebSocket"
-    },
-    logbook: {
-      autopilot: "Autopilot rotiert bei Inaktivität",
-      eyebrow: "Mission Log",
-      title: "Was passiert ist"
-    },
-    refresh: {
-      aria: (seconds: number) => `Nächster Refresh in ${seconds} Sekunden`
-    },
-    services: {
-      onlineCount: (online: number, total: number) => `${online} von ${total} Diensten online`,
-      subtitle: "Schnelle Einstiege, klickbereit während jeder Animation.",
-      title: "Module"
-    },
-    status: {
-      info: {
-        available: "API aktiv",
-        checking: "API-Prüfung",
-        error: "API Fehler",
-        planned: "Geplant",
-        unsupported: "API offen"
-      },
-      overall: {
-        checking: "Status wird geprüft",
-        degraded: "Teilweise verfügbar",
-        offline: "Störung erkannt",
-        online: "Alle öffentlichen Dienste erreichbar"
-      },
-      service: {
-        checking: "Prüfung",
-        degraded: "Eingeschränkt",
-        offline: "Offline",
-        online: "Online",
-        planned: "Geplant"
-      }
-    },
-    theme: {
-      activate: (label: string) => `Theme ${label} aktivieren`,
-      label: "Theme"
-    },
-    time: {
-      unchecked: "Noch nicht geprüft"
-    }
-  },
-  en: {
-    aria: {
-      languageSelection: "Language selection",
-      serviceActions: "Actions",
-      serviceDetails: "show details",
-      moduleDetail: "Module detail",
-      newsDetail: "News detail",
-      overallStatus: "Overall status",
-      liveUpdates: "Live updates",
-      themeSelection: "Theme selection"
-    },
-    detail: {
-      actions: "Actions",
-      emptyInfo:
-        "Service Info API is being checked. Services can implement the public info endpoint later.",
-      intro:
-        "This panel is prepared for live details and service actions once the service exposes public metadata through its API. Only approved status data stays visible; operational details and internal routes remain server-side.",
-      label: "Service Detail",
-      metrics: "Service metrics",
-      notAvailable: "Not available yet",
-      open: "Open",
-      response: "Response",
-      status: "Status",
-      update: "Update"
-    },
-    hero: {
-      eyebrow: "COMMAND DISPLAY / PUBLIC SERVICES",
-      text: "System access to available services. Live status is active, public telemetry is reduced to availability."
-    },
-    language: {
-      label: "Language",
-      options: {
-        de: "Deutsch",
-        en: "English"
-      },
-      switchTo: {
-        de: "Switch to German",
-        en: "Switch to English"
-      }
-    },
-    live: {
-      fallback: "Polling fallback",
-      lastUpdate: "Last update",
-      live: "Live via WebSocket"
-    },
-    logbook: {
-      autopilot: "Autopilot rotates while idle",
-      eyebrow: "Mission Log",
-      title: "What happened"
-    },
-    refresh: {
-      aria: (seconds: number) => `Next refresh in ${seconds} seconds`
-    },
-    services: {
-      onlineCount: (online: number, total: number) => `${online} of ${total} services online`,
-      subtitle: "Fast entry points, clickable through every animation.",
-      title: "Modules"
-    },
-    status: {
-      info: {
-        available: "API active",
-        checking: "API check",
-        error: "API error",
-        planned: "Planned",
-        unsupported: "API open"
-      },
-      overall: {
-        checking: "Checking status",
-        degraded: "Partially available",
-        offline: "Incident detected",
-        online: "All public services reachable"
-      },
-      service: {
-        checking: "Checking",
-        degraded: "Degraded",
-        offline: "Offline",
-        online: "Online",
-        planned: "Planned"
-      }
-    },
-    theme: {
-      activate: (label: string) => `Activate ${label} theme`,
-      label: "Theme"
-    },
-    time: {
-      unchecked: "Not checked yet"
-    }
-  }
-} as const;
+const HEALTH_REFRESH_MS = 10000;
+const STORAGE_KEY = "schnick-schnack.theme";
+const DEFAULT_THEME = "dark";
+const THEMES = [
+  { id: "dark", label: "Dark" },
+  { id: "light", label: "Light" }
+] as const;
 
-type Translation = (typeof translations)[Language];
-
-const serviceCopy: Record<string, LocalizedText> = {
-  auth: {
-    de: "Zentrale Anmeldung für Dienste mit Single Sign-on.",
-    en: "Central sign-in for services with single sign-on."
-  },
-  gitlab: {
-    de: "Code- und Projektplattform für die schnick-schnack-Projekte.",
-    en: "Code and project platform for schnick-schnack projects."
-  },
-  realtime: {
-    de: "Live-Kommunikation für Sprach- und Medienverbindungen.",
-    en: "Live communication for voice and media connections."
-  },
-  voice: {
-    de: "Geschützter Zugang zur OpenVoice-Oberfläche.",
-    en: "Protected access to the OpenVoice interface."
-  }
+const stateLabels: Record<ServiceState, string> = {
+  checking: "Prüfung",
+  degraded: "Eingeschränkt",
+  offline: "Offline",
+  online: "Online",
+  planned: "Geplant"
 };
 
-const serviceMessages: Record<string, LocalizedText> = {
-  "Dienst antwortet.": {
-    de: "Dienst antwortet.",
-    en: "Service is responding."
-  },
-  "Dienst antwortet unerwartet.": {
-    de: "Dienst antwortet unerwartet.",
-    en: "Service responded unexpectedly."
-  },
-  "Dienst ist aktuell nicht erreichbar.": {
-    de: "Dienst ist aktuell nicht erreichbar.",
-    en: "Service is currently unreachable."
-  },
-  "Geplant.": {
-    de: "Geplant.",
-    en: "Planned."
-  },
-  "Status wird geprüft.": {
-    de: "Status wird geprüft.",
-    en: "Checking status."
-  }
+const overallLabels: Record<HealthSnapshot["overall"], string> = {
+  checking: "Status wird geprüft",
+  degraded: "Teilweise verfügbar",
+  offline: "Störung erkannt",
+  online: "Alle öffentlichen Dienste erreichbar"
+};
+
+const infoStateLabels: Record<ServiceInfoState, string> = {
+  available: "API aktiv",
+  checking: "API-Prüfung",
+  error: "API Fehler",
+  planned: "Geplant",
+  unsupported: "Keine API-Daten"
 };
 
 const iconMap = {
   gitlab: GitBranch,
   mic: Mic2,
-  radio: RadioTower,
-  shield: ShieldCheck
+  shield: ShieldCheck,
+  slack: Slack
 };
+
+const navItems = [
+  { id: "overview", label: "Übersicht", icon: CircleGauge },
+  { id: "systems", label: "Systeme", icon: SlidersHorizontal },
+  { id: "channels", label: "Kanäle", icon: Hash },
+  { id: "status", label: "Status", icon: CheckCircle2 },
+  { id: "news", label: "News", icon: FileText }
+] as const;
 
 function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -350,10 +167,6 @@ function prefersReducedMotion(): boolean {
 
 function normalizeTheme(theme: string | null | undefined): ThemeId {
   return THEMES.some((item) => item.id === theme) ? (theme as ThemeId) : DEFAULT_THEME;
-}
-
-function normalizeLanguage(language: string | null | undefined): Language {
-  return language === "en" || language === "de" ? language : DEFAULT_LANGUAGE;
 }
 
 function isStorageAvailable(): boolean {
@@ -367,12 +180,18 @@ function isStorageAvailable(): boolean {
   }
 }
 
+function writeDesignCookie(key: string, value: string) {
+  document.cookie = `${key}=${encodeURIComponent(value)}; Path=/; Domain=.schnick-schnack.info; Max-Age=31536000; SameSite=Lax`;
+}
+
 function applyTheme(theme: ThemeId, shouldSave = true) {
   document.documentElement.dataset.theme = theme;
 
   if (shouldSave && isStorageAvailable()) {
     window.localStorage.setItem(STORAGE_KEY, theme);
   }
+
+  writeDesignCookie(STORAGE_KEY, theme);
 }
 
 function applyInitialTheme(): ThemeId {
@@ -382,143 +201,140 @@ function applyInitialTheme(): ThemeId {
   return initialTheme;
 }
 
-function applyLanguage(language: Language, shouldSave = true) {
-  document.documentElement.lang = language;
-
-  if (shouldSave && isStorageAvailable()) {
-    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+function withThemeParam(href: string, theme: ThemeId): string {
+  try {
+    const url = new URL(href, window.location.origin);
+    url.searchParams.set("theme", theme);
+    return url.toString();
+  } catch {
+    return href;
   }
 }
 
-function applyInitialLanguage(): Language {
-  const savedLanguage = isStorageAvailable() ? window.localStorage.getItem(LANGUAGE_STORAGE_KEY) : null;
-  const initialLanguage = normalizeLanguage(savedLanguage);
-  applyLanguage(initialLanguage, false);
-  return initialLanguage;
-}
-
-const wordPermutations = [
-  ["Lu", "To", "Bo"],
-  ["Lu", "Bo", "To"],
-  ["To", "Lu", "Bo"],
-  ["To", "Bo", "Lu"],
-  ["Bo", "Lu", "To"],
-  ["Bo", "To", "Lu"]
-] as const;
-
-const logbookEntries = [
-  {
-    id: "portal-online",
-    title: "Portal online",
-    meta: "Log 001 / Public Gateway",
-    teaser: "Das öffentliche Gateway bündelt Voice, Auth und Realtime in einer Statusfläche.",
-    body: `Das Portal ist der sichtbare Einstiegspunkt für die Dienste auf schnick-schnack.info. Der wichtigste Architekturentscheid war, die öffentliche Ansicht strikt von internen Betriebsdetails zu trennen. Besucher sehen Namen, Status, Aktualisierung und Aktionen, aber keine Container, Ports, Datenbankadressen oder privaten Routings. Die Statusdaten entstehen serverseitig und werden als reduzierte Public-Health-Snapshots ausgeliefert. Der Browser bekommt dadurch nur die Information, die für Orientierung und Vertrauen sinnvoll ist. Voice wird als geschützter OpenVoice-Zugang geführt, Auth verweist auf die SSO-Ebene, und Realtime repräsentiert die Medienstrecke. Im Hintergrund laufen weitere Bausteine wie Postgres, Valkey, Prometheus, Grafana, Coturn und LiveKit, doch die Landing Page behandelt sie nicht als öffentliche Zielsysteme. Das ist Absicht: Infrastruktur unterstützt das Portal, sie wird aber nicht selbst zum Exponat. Der Health-Server aktualisiert regelmäßig und verteilt Snapshots über WebSocket. Wenn die Verbindung fehlt, fällt die Oberfläche auf Abfrage zurück. So bleibt das Display lebendig, ohne Nutzer mit technischen Fehlermeldungen zu belasten. Das erste Deployment wurde als Docker-Service auf dem Server bereitgestellt und lokal hinter Nginx angebunden. Die Domain kann über TLS terminieren, während die Anwendung selbst intern bleibt. Damit ist die Seite öffentlich schnell erreichbar, aber operativ sauber gekapselt. Dieser Stand ist die Basis für spätere Detail-APIs: Jeder Dienst kann künftig eigene öffentliche Metadaten liefern, während das Portal weiterhin entscheidet, welche Informationen wirklich auf die Brücke gehören. Auch das Deployment wurde reproduzierbar gehalten: Build, Containerstart, Healthcheck und GitHub-Push sind dokumentiert und geprüft. Änderungen können dadurch zügig veröffentlicht werden, ohne am Server manuell Dateien zu editieren oder Zustände zu erraten. Für Besucher entsteht ein ruhiger Einstieg, für Betreiber bleibt die Oberfläche kontrollierbar, testbar und erweiterbar. Der nächste Schritt wird sein, Logbuch und Servicekatalog aus Datenquellen zu speisen, damit Deployments, Wartungsfenster und neue Module ohne Frontend-Release erscheinen. Trotzdem bleibt der Sicherheitsfilter zentral: öffentlich ist nur, was bewusst freigegeben wurde. Diese Linie bleibt für spätere Integrationen verbindlich.`
-  },
-  {
-    id: "hud-interface",
-    title: "HUD Interface aktiviert",
-    meta: "Log 002 / Display System",
-    teaser: "Das Display wurde vom Portal zur Brückenkonsole mit animiertem HUD erweitert.",
-    body: `Das Interface wurde von einer klassischen Landing Page zu einem Command Display umgebaut. Die Gestaltung bleibt dunkel, technisch und konzentriert, nutzt aber stärkere rote Energieakzente, Cyan-Kanten und ein feines Raster, damit die Oberfläche wie ein aktives Kontrollsystem wirkt. Die ToLuBo-Kennung rotiert nicht nur beim Laden, sondern sortiert sich regelmäßig neu. Dabei blenden die Segmente leicht aus, wabern, setzen sich wieder zusammen und verweilen anschließend lange genug, damit die Bewegung nicht nervös wirkt. Die Servicekarten bekamen schnelle Boot-Animationen, umlaufende Rahmen und kurze Lichtimpulse. Wichtig war, dass diese Effekte nicht gegen die Bedienbarkeit arbeiten. Hover, Fokus und Klick müssen unmittelbar reagieren; Animationen dürfen nie die Aktion blockieren. Deshalb laufen die Übergänge kurz, präzise und überwiegend transformbasiert. Der Hintergrund wurde nachjustiert: Statt eines dominanten Sweeps fahren nur noch gelegentlich kleine Lightcycle-Linien über das Raster. Sie geben dem Display Bewegung, ohne die Inhalte zu überstrahlen. Auch die Farbharmonie wurde geprüft. Rot markiert Energie, Aufmerksamkeit und Interaktion, während Teal und Cyan den technischen Grundton stabilisieren. Erfolgsstatus bleibt grün, Warnung bleibt warm, Fehler bleibt rot. Dadurch entsteht kein reines Alarmbild, sondern ein kontrolliertes Cockpit. Die Live-Statusfläche wurde als eigene HUD-Kachel gestaltet, mit Kanten, Sweep und klarer Verbindungsmeldung. Gleichzeitig respektiert die Oberfläche reduzierte Bewegung: Nutzer mit entsprechender Systemeinstellung bekommen keine Flip-, Waber- oder Laufanimationen. Das Ergebnis ist expressiver als ein Business-Dashboard, aber weiterhin scanbar. Die Seite soll Eindruck machen, ohne die Grundaufgabe zu verlieren: schnell erkennen, was verfügbar ist, und den passenden Dienst öffnen. Diese Balance war der Kern des Refactors. Die Komposition bleibt responsiv, hält Text innerhalb der Panels und vermeidet dekorative Elemente ohne Funktion. So fühlt sich das Portal wie ein Display an, nicht wie eine Effekt-Demo. Technisch bleiben die Animationen bewusst in CSS, damit React nur Zustände steuert. Das reduziert Re-Renders, hält den Code auch unter Last lesbar und macht spätere Theme-Varianten einfacher testbar.`
-  },
-  {
-    id: "service-panels",
-    title: "Service Panels erweitert",
-    meta: "Log 003 / Interaction Layer",
-    teaser: "Kacheln wurden zu Detailpanels mit vorbereiteter Action-Schicht und Refresh-Takt.",
-    body: `Die Kacheln folgen jetzt einem wiederverwendbaren Interaktionsmodell: vorne steht eine kompakte Kurzinfo, in der Detailansicht entsteht ein größeres Panel mit Kontext, Messwerten und Aktionen. Dieses Muster gilt nicht nur für Dienste, sondern auch für News und spätere Logbuch-Einträge. Der Nutzer soll überall dasselbe Verhalten lernen: eine Karte zeigt den Teaser, die geöffnete Ansicht zeigt den eigentlichen Inhalt. Ursprünglich wuchs die Karte direkt im Grid. Das erzeugte kurzzeitig Layoutverschiebungen und konnte Scrollbars einblenden. Die aktuelle Richtung trennt Layout und Detailzustand sauberer. Das Grid bleibt stabil, während die Detailansicht als zentriertes HUD-Panel im sichtbaren Bereich erscheint. Dadurch kann die Animation größer und dramatischer sein, ohne über Ränder zu ragen oder die Seite zu verschieben. Jede Dienstkarte hat außerdem einen rückwärts laufenden Refresh-Balken. Er basiert auf dem letzten Health-Snapshot und zeigt, wie lange der aktuelle Zustand voraussichtlich noch gültig ist. Das ist nützlicher als ein statischer Zeitstempel, weil der Nutzer den Takt der Telemetrie direkt sieht. Auf der Rückseite stehen vorbereitete Detailinformationen, Status, Updatezeit und Reaktionszeit. Die Action-Zone enthält aktuell nur Öffnen, ist aber als Platz für spätere API-gelieferte Aktionen angelegt. Denkbar sind direkte Links zu Dashboards, Login-Flows, Raumstatus, Audit-Hinweisen oder Wartungsfenstern. Wichtig bleibt: Die Dienste liefern später öffentliche Metadaten, das Portal entscheidet über Darstellung und Sicherheitsfilter. Intern laufende Komponenten wie LiveKit, Coturn, Valkey, Postgres, Prometheus und Grafana können so Zustände beeinflussen, ohne ungefiltert sichtbar zu werden. Das Interaktionsmodell ist damit vorbereitet für mehr Inhalt, bleibt aber heute schon bedienbar. Tests prüfen nachweisbar Hover, Klick-Schließen, Countdown, Logbuchposition und Statusdarstellung. Das reduziert die Gefahr, dass visuelle Effekte die Nutzbarkeit beschädigen. Der Dialog-Layer ist bewusst zentral, begrenzt und intern scrollbar. So darf Text ausführlich werden, während die Seite selbst ruhig bleibt und keine temporären Browserleisten erzeugt. News nutzen dasselbe Muster: kurzer Teaser außen, technischer Langtext innen, später gespeist aus einem Feed mit Versionsstand und Autor.`
+function loginHref(theme: ThemeId): string {
+  try {
+    const url = new URL("https://auth.schnick-schnack.info");
+    url.searchParams.set("theme", theme);
+    url.searchParams.set("return_to", window.location.href);
+    return url.toString();
+  } catch {
+    return "https://auth.schnick-schnack.info";
   }
-];
-
-const logbookTranslations: Record<string, { title: LocalizedText; meta: LocalizedText; teaser: LocalizedText; body: LocalizedText }> = {
-  "hud-interface": {
-    title: {
-      de: "HUD Interface aktiviert",
-      en: "HUD Interface activated"
-    },
-    meta: {
-      de: "Log 002 / Display System",
-      en: "Log 002 / Display System"
-    },
-    teaser: {
-      de: "Das Display wurde vom Portal zur Brückenkonsole mit animiertem HUD erweitert.",
-      en: "The display evolved from a portal into a bridge console with an animated HUD."
-    },
-    body: {
-      de: logbookEntries[1]!.body,
-      en: "The interface moved from a classic landing page to a command display. It keeps a dark, technical tone while using red energy accents, cyan edges, and a fine grid to feel like an active control surface. Motion is short, transform-based, and disabled for reduced-motion users. The result is more expressive than a business dashboard while staying readable: visitors can quickly see what is available and open the right service."
-    }
-  },
-  "portal-online": {
-    title: {
-      de: "Portal online",
-      en: "Portal online"
-    },
-    meta: {
-      de: "Log 001 / Public Gateway",
-      en: "Log 001 / Public Gateway"
-    },
-    teaser: {
-      de: "Das öffentliche Gateway bündelt Voice, Auth und Realtime in einer Statusfläche.",
-      en: "The public gateway brings Voice, Auth, and Realtime into one status surface."
-    },
-    body: {
-      de: logbookEntries[0]!.body,
-      en: "The portal is the public entry point for services on schnick-schnack.info. Its core boundary is deliberate: visitors see service names, status, update times, and actions, but not private containers, ports, database addresses, or routing. Health data is reduced server-side before it reaches the browser, keeping the page useful for orientation without exposing operational internals."
-    }
-  },
-  "service-panels": {
-    title: {
-      de: "Service Panels erweitert",
-      en: "Service panels expanded"
-    },
-    meta: {
-      de: "Log 003 / Interaction Layer",
-      en: "Log 003 / Interaction Layer"
-    },
-    teaser: {
-      de: "Kacheln wurden zu Detailpanels mit vorbereiteter Action-Schicht und Refresh-Takt.",
-      en: "Tiles became detail panels with a prepared action layer and refresh cadence."
-    },
-    body: {
-      de: logbookEntries[2]!.body,
-      en: "The cards now follow a shared interaction model: the front shows compact context, while the detail view contains status, measurements, and actions. The grid stays stable and the centered HUD panel can hold longer content without moving the whole page. The reverse refresh indicator shows how long the current health snapshot remains fresh."
-    }
-  }
-};
-
-function getLogEntry(entry: (typeof logbookEntries)[number], language: Language) {
-  const localized = logbookTranslations[entry.id];
-  return {
-    body: localized?.body[language] ?? entry.body,
-    meta: localized?.meta[language] ?? entry.meta,
-    teaser: localized?.teaser[language] ?? entry.teaser,
-    title: localized?.title[language] ?? entry.title
-  };
 }
 
-function shuffleSegments(): string[] {
-  const next = wordPermutations[Math.floor(Math.random() * wordPermutations.length)] ?? wordPermutations[0];
-  return [...next];
-}
-
-function nextSegments(current: string[]): string[] {
-  const currentKey = current.join("");
-  const choices = wordPermutations.filter((segments) => segments.join("") !== currentKey);
-  const next = choices[Math.floor(Math.random() * choices.length)] ?? wordPermutations[0];
-  return [...next];
-}
-
-function formatTime(value: string | null, language: Language): string {
+function formatTime(value: string | null): string {
   if (!value) {
-    return translations[language].time.unchecked;
+    return "Noch nicht geprüft";
   }
 
-  return new Intl.DateTimeFormat(language === "de" ? "de-DE" : "en-US", {
+  return new Intl.DateTimeFormat("de-DE", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit"
   }).format(new Date(value));
+}
+
+function formatFeedTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "--:--";
+  }
+
+  return new Intl.DateTimeFormat("de-DE", {
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}
+
+function formatDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Ohne Datum";
+  }
+
+  return new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  }).format(date);
+}
+
+function metricValue(metric: ServiceMetric): string {
+  return `${String(metric.value)}${metric.unit ? ` ${metric.unit}` : ""}`;
+}
+
+function metricLabel(metric: ServiceMetric): string {
+  return `${metric.label}: ${metricValue(metric)}`;
+}
+
+function rowTone(service: PublicService): RowTone {
+  if (service.state === "offline" || service.state === "degraded") {
+    return "amber";
+  }
+
+  if (service.icon === "shield") {
+    return "blue";
+  }
+
+  if (service.icon === "slack") {
+    return "violet";
+  }
+
+  if (service.icon === "gitlab") {
+    return "amber";
+  }
+
+  return "green";
+}
+
+function chartPoints(serviceInfo: ServiceInfoResult | undefined): number[] | null {
+  const chart = serviceInfo?.data?.charts?.find((item) => item.points.length > 1);
+  if (!chart) {
+    return null;
+  }
+
+  return chart.points.map((point) => point.value).slice(-16);
+}
+
+function publicUpdates(snapshot: ServiceInfoSnapshot | null) {
+  return (
+    snapshot?.services
+      .flatMap((service) =>
+        (service.data?.sections ?? []).map((section) => ({
+          id: `${service.serviceId}-${section.id}`,
+          serviceId: service.serviceId,
+          date: service.data?.generatedAt ?? service.updatedAt ?? snapshot.generatedAt,
+          title: section.title,
+          text: section.body,
+          href: service.data?.actions?.[0]?.href
+        }))
+      )
+      .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime()) ?? []
+  );
+}
+
+function averageResponse(services: PublicService[]): number | null {
+  const responseTimes = services
+    .map((service) => service.responseMs)
+    .filter((value): value is number => value !== null);
+
+  if (!responseTimes.length) {
+    return null;
+  }
+
+  return Math.round(responseTimes.reduce((sum, value) => sum + value, 0) / responseTimes.length);
+}
+
+function serviceMetricValue(services: ServiceInfoResult[], status: ServiceInfoState): number {
+  return services.filter((service) => service.status === status).length;
+}
+
+function firstStatusChart(serviceInfo: ServiceInfoSnapshot | null): ServiceChart | null {
+  return (
+    serviceInfo?.services
+      .flatMap((service) => service.data?.charts ?? [])
+      .find((chart) => chart.points.length > 1) ?? null
+  );
 }
 
 function useHealth(): { snapshot: HealthSnapshot | null; socketState: SocketState } {
@@ -565,7 +381,7 @@ function useHealth(): { snapshot: HealthSnapshot | null; socketState: SocketStat
       if (!closed) {
         setSocketState("fallback");
         void loadSnapshot();
-        fallbackTimer = window.setInterval(loadSnapshot, 10000);
+        fallbackTimer = window.setInterval(loadSnapshot, HEALTH_REFRESH_MS);
       }
     });
 
@@ -624,181 +440,29 @@ function useServiceInfo(): ServiceInfoSnapshot | null {
   return snapshot;
 }
 
-function StatusPill({ state, t }: { state: ServiceState; t: Translation }) {
-  return <span className={`status-pill status-${state}`}>{t.status.service[state]}</span>;
-}
-
-function useHoverIntent(onIntent: () => void) {
-  const timer = useRef<number | null>(null);
-
-  const clearIntent = () => {
-    if (timer.current !== null) {
-      window.clearTimeout(timer.current);
-      timer.current = null;
-    }
-  };
-
-  const scheduleIntent = () => {
-    clearIntent();
-    timer.current = window.setTimeout(() => {
-      timer.current = null;
-      onIntent();
-    }, HOVER_INTENT_MS);
-  };
-
-  useEffect(() => clearIntent, []);
-
-  return { clearIntent, scheduleIntent };
-}
-
-function RefreshCountdown({ generatedAt, t }: { generatedAt: string | null; t: Translation }) {
-  const [now, setNow] = useState(() => Date.now());
+function useIsMobile(): boolean {
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia("(max-width: 900px)").matches);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 200);
-    return () => window.clearInterval(timer);
+    const query = window.matchMedia("(max-width: 900px)");
+    const update = () => setIsMobile(query.matches);
+
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
   }, []);
 
-  const elapsed = generatedAt ? Math.max(0, now - new Date(generatedAt).getTime()) : HEALTH_REFRESH_MS;
-  const remaining = Math.max(0, HEALTH_REFRESH_MS - elapsed);
-  const progress = Math.max(0, Math.min(1, remaining / HEALTH_REFRESH_MS));
-  const seconds = Math.ceil(remaining / 1000);
-
-  return (
-    <div className="refresh-countdown" aria-label={t.refresh.aria(seconds)}>
-      <span
-        className="refresh-countdown__dial"
-        style={{ "--refresh-progress": progress } as React.CSSProperties}
-        aria-hidden="true"
-      />
-      <strong>{seconds}s</strong>
-    </div>
-  );
+  return isMobile;
 }
 
-function ServiceInfoMetrics({ metrics, t }: { metrics: ServiceMetric[]; t: Translation }) {
-  return (
-    <div className="service-info-metrics" aria-label={t.detail.metrics}>
-      {metrics.map((metric) => (
-        <div className={`service-info-metric service-info-metric--${metric.tone ?? "neutral"}`} key={metric.id}>
-          <span>{metric.label}</span>
-          <strong>
-            {String(metric.value)}
-            {metric.unit ? <small>{metric.unit}</small> : null}
-          </strong>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ServiceInfoChart({ chart }: { chart: ServiceChart }) {
-  const maxValue = Math.max(1, ...chart.points.map((point) => point.value));
-
-  return (
-    <div className="service-info-chart" aria-label={chart.title}>
-      <div className="service-info-chart__heading">
-        <span>{chart.title}</span>
-        {chart.unit ? <small>{chart.unit}</small> : null}
-      </div>
-      <div className="service-info-chart__bars">
-        {chart.points.map((point) => (
-          <span
-            aria-label={`${point.label}: ${point.value}${chart.unit ?? ""}`}
-            key={`${point.label}-${point.value}`}
-            style={{ "--bar-height": `${Math.max(6, Math.round((point.value / maxValue) * 100))}%` } as React.CSSProperties}
-            title={`${point.label}: ${point.value}${chart.unit ?? ""}`}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ServiceCard({
-  service,
-  generatedAt,
-  isActive,
-  onOpen,
-  language,
-  t
-}: {
-  service: PublicService;
-  generatedAt: string | null;
-  isActive: boolean;
-  onOpen: () => void;
-  language: Language;
-  t: Translation;
-}) {
-  const Icon = iconMap[service.icon];
-  const cardClassName = `service-card${isActive ? " service-card--active" : ""}`;
-  const { clearIntent, scheduleIntent } = useHoverIntent(onOpen);
-  const description = serviceCopy[service.id]?.[language] ?? service.description;
-  const message = serviceMessages[service.message]?.[language] ?? service.message;
-
-  return (
-    <article
-      className={`${cardClassName}${isActive ? " is-selected" : ""}`}
-      data-selectable-card
-      aria-selected={isActive}
-      onClick={onOpen}
-      onMouseEnter={scheduleIntent}
-      onMouseLeave={clearIntent}
-      onFocus={onOpen}
-      tabIndex={0}
-      aria-label={`${service.name} ${t.aria.serviceDetails}`}
-    >
-      <div className="service-card__shell">
-        <span className="selected-badge">FOCUS</span>
-        <div className="service-card__face service-card__face--front">
-          <div className="service-card__topline">
-            <div className="service-icon" aria-hidden="true">
-              <Icon size={24} strokeWidth={2} />
-            </div>
-            <StatusPill state={service.state} t={t} />
-          </div>
-          <div>
-            <h3>{service.name}</h3>
-            <p>{description}</p>
-          </div>
-          <div className="service-card__meta">
-            <span>
-              <Clock3 size={15} aria-hidden="true" />
-              {formatTime(service.updatedAt, language)}
-            </span>
-            {service.responseMs !== null ? <span>{service.responseMs} ms</span> : <span>{message}</span>}
-          </div>
-          <RefreshCountdown generatedAt={generatedAt} t={t} />
-        </div>
-      </div>
-    </article>
-  );
+function StatusPill({ state }: { state: ServiceState }) {
+  return <span className={`status-pill status-${state}`}>{stateLabels[state]}</span>;
 }
 
 function Wordmark() {
-  const [segments, setSegments] = useState(() => shuffleSegments());
-  const [phase, setPhase] = useState<"entering" | "idle" | "leaving">("entering");
-
-  useEffect(() => {
-    const settle = window.setTimeout(() => setPhase("idle"), 900);
-    const interval = window.setInterval(() => {
-      setPhase("leaving");
-      window.setTimeout(() => {
-        setSegments((current) => nextSegments(current));
-        setPhase("entering");
-        window.setTimeout(() => setPhase("idle"), 900);
-      }, 320);
-    }, 12000);
-
-    return () => {
-      window.clearTimeout(settle);
-      window.clearInterval(interval);
-    };
-  }, []);
-
   return (
-    <div className={`wordmark wordmark--${phase}`} aria-label={segments.join("")}>
-      {segments.map((segment, index) => (
+    <div className="wordmark" aria-label="Lu To Bo">
+      {["Lu", "To", "Bo"].map((segment, index) => (
         <span key={`${segment}-${index}`} style={{ "--segment-index": index } as React.CSSProperties}>
           {segment}
         </span>
@@ -807,277 +471,889 @@ function Wordmark() {
   );
 }
 
-function Logbook({
-  activeLogId,
-  onOpen,
-  language,
-  t
-}: {
-  activeLogId: string;
-  onOpen: (id: string) => void;
-  language: Language;
-  t: Translation;
-}) {
-  const activeEntry = (logbookEntries.find((entry) => entry.id === activeLogId) ?? logbookEntries[0])!;
-
-  return (
-    <section className="logbook" aria-labelledby="logbook-title">
-      <div className="panel-heading">
-        <div>
-          <span>{t.logbook.eyebrow}</span>
-          <h2 id="logbook-title">{t.logbook.title}</h2>
-        </div>
-        <small>{t.logbook.autopilot}</small>
-      </div>
-      <div className="logbook__layout">
-        <div className="logbook__entries" data-card-group>
-          {logbookEntries.map((entry) => (
-            <LogCard
-              entry={entry}
-              isActive={activeLogId === entry.id}
-              key={entry.id}
-              language={language}
-              onOpen={() => onOpen(entry.id)}
-              t={t}
-            />
-          ))}
-        </div>
-        <LogDetail entry={activeEntry} language={language} t={t} />
-      </div>
-    </section>
-  );
-}
-
-function LogCard({
-  entry,
-  isActive,
-  onOpen,
-  language,
-  t
-}: {
-  entry: (typeof logbookEntries)[number];
-  isActive: boolean;
-  onOpen: () => void;
-  language: Language;
-  t: Translation;
-}) {
-  const { clearIntent, scheduleIntent } = useHoverIntent(onOpen);
-  const localizedEntry = getLogEntry(entry, language);
-
-  return (
-    <article
-      className={`log-entry${isActive ? " log-entry--active is-selected" : ""}`}
-      data-selectable-card
-      aria-selected={isActive}
-      tabIndex={0}
-      aria-label={`${localizedEntry.title} ${t.aria.serviceDetails}`}
-      onMouseEnter={scheduleIntent}
-      onMouseLeave={clearIntent}
-      onFocus={onOpen}
-      onClick={onOpen}
-    >
-      <span className="selected-badge">FOCUS</span>
-      <span>{localizedEntry.meta}</span>
-      <h3>{localizedEntry.title}</h3>
-      <p>{localizedEntry.teaser}</p>
-    </article>
-  );
-}
-
-function LogDetail({ entry, language, t }: { entry: (typeof logbookEntries)[number]; language: Language; t: Translation }) {
-  const localizedEntry = getLogEntry(entry, language);
-
-  return (
-    <article className="detail-panel detail-panel--news" aria-label={t.aria.newsDetail} data-active-detail key={entry.id}>
-      <div className="detail-header">
-        <div className="service-icon service-icon--detail" aria-hidden="true">
-          <Activity size={24} strokeWidth={2} />
-        </div>
-        <div>
-          <span>{localizedEntry.meta}</span>
-          <h3 data-active-title>{localizedEntry.title}</h3>
-        </div>
-      </div>
-      <p className="detail-copy detail-copy--long" data-active-description>{localizedEntry.body}</p>
-    </article>
-  );
-}
-
-function ServiceDetail({
-  service,
-  generatedAt,
-  serviceInfo,
-  language,
-  t
-}: {
-  service: PublicService | undefined;
-  generatedAt: string | null;
-  serviceInfo: ServiceInfoResult | undefined;
-  language: Language;
-  t: Translation;
-}) {
-  if (!service) {
-    return null;
-  }
-
-  const Icon = iconMap[service.icon];
-  const infoStatus = serviceInfo?.status ?? service.infoState;
-  const infoData = serviceInfo?.data ?? null;
-  const serviceActions = infoData?.actions?.length ? infoData.actions : null;
-  const description = serviceCopy[service.id]?.[language] ?? service.description;
-  const message = serviceMessages[service.message]?.[language] ?? service.message;
-
-  return (
-    <article className="detail-panel detail-panel--service" aria-label={t.aria.moduleDetail} data-active-detail key={service.id}>
-      <div className="detail-header">
-        <div className="service-icon service-icon--detail" aria-hidden="true">
-          <Icon size={24} strokeWidth={2} />
-        </div>
-        <div>
-          <span>{t.detail.label}</span>
-          <h3 data-active-title>{service.name}</h3>
-        </div>
-      </div>
-      <p className="detail-copy" data-active-description>
-        {infoData?.summary ?? description} {t.detail.intro}
-      </p>
-      <div className="detail-metrics">
-        <span>{t.detail.status}: {t.status.service[service.state]}</span>
-        <span>{t.detail.update}: {formatTime(service.updatedAt, language)}</span>
-        <span>{service.responseMs !== null ? `${t.detail.response}: ${service.responseMs} ms` : message}</span>
-        <span>{t.status.info[infoStatus]}</span>
-      </div>
-      <div className="service-info-zone">
-        {infoData?.metrics?.length ? <ServiceInfoMetrics metrics={infoData.metrics} t={t} /> : null}
-        {infoData?.charts?.[0] ? <ServiceInfoChart chart={infoData.charts[0]} /> : null}
-        {!infoData ? (
-          <p className="service-info-empty">
-            {serviceInfo?.message ?? t.detail.emptyInfo}
-          </p>
-        ) : null}
-      </div>
-      <RefreshCountdown generatedAt={generatedAt} t={t} />
-      <div className="service-actions" aria-label={`${service.name} ${t.aria.serviceActions}`}>
-        {serviceActions ? (
-          serviceActions.map((action) => (
-            <a className="service-card__link" href={action.href} key={action.id}>
-              {action.label}
-              <ArrowUpRight size={17} aria-hidden="true" />
-            </a>
-          ))
-        ) : service.href ? (
-          <a className="service-card__link" href={service.href}>
-            {t.detail.open}
-            <ArrowUpRight size={17} aria-hidden="true" />
-          </a>
-        ) : (
-          <span className="service-card__disabled">{t.detail.notAvailable}</span>
-        )}
-      </div>
-    </article>
-  );
-}
-
-function ThemeDock({
+function ThemeToggle({
   activeTheme,
-  onThemeChange,
-  t
+  onThemeChange
 }: {
   activeTheme: ThemeId;
   onThemeChange: (theme: ThemeId) => void;
-  t: Translation;
 }) {
   return (
-    <aside className="theme-dock" aria-label={t.aria.themeSelection}>
-      <div className="theme-dock__label">
-        <SwatchBook size={15} aria-hidden="true" />
-        <span>{t.theme.label}</span>
-      </div>
-      <div className="theme-dock__chips">
-        {THEMES.map((theme) => (
+    <div className="theme-toggle" role="group" aria-label="Darstellung">
+      {THEMES.map((theme) => {
+        const Icon = theme.id === "dark" ? Moon : Sun;
+        return (
           <button
-            aria-label={t.theme.activate(theme.label)}
+            aria-label={`Theme ${theme.label} aktivieren`}
             aria-pressed={activeTheme === theme.id}
-            className={`theme-chip${activeTheme === theme.id ? " is-active" : ""}`}
+            className={`theme-toggle__option${activeTheme === theme.id ? " is-active" : ""}`}
             data-theme-choice={theme.id}
             key={theme.id}
             onClick={() => onThemeChange(theme.id)}
             type="button"
           >
-            <span
-              className="theme-chip__swatch"
-              style={
-                {
-                  "--chip-a": theme.colors[0],
-                  "--chip-b": theme.colors[1]
-                } as React.CSSProperties
-              }
-              aria-hidden="true"
-            />
+            <Icon size={15} aria-hidden="true" />
             <span>{theme.label}</span>
           </button>
-        ))}
+        );
+      })}
+    </div>
+  );
+}
+
+function Sidebar({
+  activeSection,
+  activeTheme,
+  onSectionChange,
+  onThemeChange
+}: {
+  activeSection: NavSection;
+  activeTheme: ThemeId;
+  onSectionChange: (section: NavSection) => void;
+  onThemeChange: (theme: ThemeId) => void;
+}) {
+  return (
+    <aside className="app-sidebar" aria-label="Schnick Schnack Navigation">
+      <a className="brand-lockup" href="/" aria-label="schnick-schnack.info Startseite">
+        <span className="brand-mark" aria-hidden="true">
+          <span />
+        </span>
+        <span className="brand-copy">
+          <small>schnick-schnack.info</small>
+          <Wordmark />
+        </span>
+      </a>
+
+      <nav className="primary-nav" aria-label="Hauptnavigation">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = activeSection === item.id;
+          return (
+            <button
+              aria-pressed={isActive}
+              className={isActive ? "is-active" : ""}
+              key={item.id}
+              onClick={() => onSectionChange(item.id)}
+              type="button"
+            >
+              <Icon size={19} aria-hidden="true" />
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+
+      <div className="sidebar-wave" aria-hidden="true">
+        <span />
+        <span />
+      </div>
+
+      <div className="sidebar-bottom">
+        <ThemeToggle activeTheme={activeTheme} onThemeChange={onThemeChange} />
+        <a className="login-secondary" href={loginHref(activeTheme)}>
+          Anmelden
+        </a>
+        <span className="secure-note">Sicher & verschlüsselt</span>
       </div>
     </aside>
   );
 }
 
-function LanguageSwitch({
-  language,
-  onLanguageChange,
-  t
+function VoiceWave() {
+  return (
+    <svg className="voice-wave" viewBox="0 0 900 230" aria-hidden="true" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="waveGradient" x1="0%" y1="50%" x2="100%" y2="50%">
+          <stop offset="0%" stopColor="rgb(162, 72, 255)" stopOpacity="0" />
+          <stop offset="28%" stopColor="rgb(99, 221, 255)" stopOpacity="0.78" />
+          <stop offset="55%" stopColor="rgb(77, 255, 214)" stopOpacity="0.88" />
+          <stop offset="100%" stopColor="rgb(217, 64, 255)" stopOpacity="0.66" />
+        </linearGradient>
+        <linearGradient id="waveSoft" x1="0%" y1="50%" x2="100%" y2="50%">
+          <stop offset="0%" stopColor="rgb(145, 72, 255)" stopOpacity="0" />
+          <stop offset="45%" stopColor="rgb(85, 185, 255)" stopOpacity="0.28" />
+          <stop offset="100%" stopColor="rgb(223, 52, 255)" stopOpacity="0.18" />
+        </linearGradient>
+      </defs>
+      <path
+        d="M0 136 C130 80 205 168 320 112 C430 58 520 82 606 54 C715 16 780 92 900 88"
+        fill="none"
+        stroke="url(#waveGradient)"
+        strokeWidth="6"
+      />
+      <path
+        d="M0 156 C150 108 230 186 360 136 C488 88 555 130 670 70 C782 14 808 170 900 128"
+        fill="none"
+        stroke="url(#waveSoft)"
+        strokeLinecap="round"
+        strokeWidth="42"
+      />
+      {Array.from({ length: 66 }).map((_, index) => (
+        <circle
+          cx={40 + index * 13}
+          cy={70 + Math.sin(index * 0.34) * 42 + Math.cos(index * 0.11) * 24}
+          fill="rgb(105, 240, 255)"
+          fillOpacity={0.1 + (index % 6) * 0.035}
+          key={index}
+          r={1.4}
+        />
+      ))}
+    </svg>
+  );
+}
+
+function TopBar({
+  activeTheme,
+  onlineCount,
+  serviceCount,
+  onStatusClick
 }: {
-  language: Language;
-  onLanguageChange: (language: Language) => void;
-  t: Translation;
+  activeTheme: ThemeId;
+  onlineCount: number;
+  serviceCount: number;
+  onStatusClick: () => void;
 }) {
   return (
-    <div className="language-switch" aria-label={t.aria.languageSelection}>
-      <span>
-        <Languages size={15} aria-hidden="true" />
-        {t.language.label}
+    <header className="top-actions">
+      <span className="system-online-pill">
+        <span aria-hidden="true" />
+        {onlineCount} / {serviceCount || 0} Systeme online
       </span>
+      <button className="system-status-button" onClick={onStatusClick} type="button">
+        <SlidersHorizontal size={17} aria-hidden="true" />
+        Systemstatus
+      </button>
+      <a className="login-primary" href={loginHref(activeTheme)}>
+        <UserRound size={19} aria-hidden="true" />
+        Anmelden
+      </a>
+    </header>
+  );
+}
+
+function Sparkline({ points }: { points: number[] }) {
+  const width = 112;
+  const height = 46;
+  const max = Math.max(...points);
+  const min = Math.min(...points);
+  const path = points
+    .map((point, index) => {
+      const x = (index / Math.max(1, points.length - 1)) * width;
+      const y = height - ((point - min) / Math.max(1, max - min)) * (height - 10) - 5;
+      return `${index === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
+    .join(" ");
+
+  return (
+    <svg className="sparkline" viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+      <path d={path} fill="none" pathLength={100} />
+    </svg>
+  );
+}
+
+function SystemRow({
+  service,
+  serviceInfo,
+  theme
+}: {
+  service: PublicService;
+  serviceInfo: ServiceInfoResult | undefined;
+  theme: ThemeId;
+}) {
+  const Icon = iconMap[service.icon];
+  const metric = serviceInfo?.data?.metrics?.[0];
+  const points = chartPoints(serviceInfo);
+  const infoStatus = serviceInfo?.status ?? service.infoState;
+  const responseText = service.responseMs !== null ? `Antwort ${service.responseMs} ms` : service.message;
+
+  return (
+    <article className={`system-row system-row--${rowTone(service)}`} aria-label={`${service.name} System`}>
+      <div className="system-row__icon" aria-hidden="true">
+        <Icon size={27} strokeWidth={2.1} />
+      </div>
+      <div className="system-row__copy">
+        <div>
+          <h3>{service.name}</h3>
+          <StatusPill state={service.state} />
+        </div>
+        <p>{service.description}</p>
+        <span>
+          {metric ? metricLabel(metric) : responseText}
+          <b aria-hidden="true">•</b>
+          {infoStateLabels[infoStatus]}
+        </span>
+      </div>
+      <div className="system-row__api">
+        <small>Info API</small>
+        <strong>{infoStateLabels[infoStatus]}</strong>
+      </div>
+      {points ? <Sparkline points={points} /> : <span className="sparkline-empty">Keine Chartdaten</span>}
+      {service.href ? (
+        <a className="open-link" href={withThemeParam(service.href, theme)}>
+          Öffnen
+          <ArrowUpRight size={17} aria-hidden="true" />
+        </a>
+      ) : (
+        <span className="open-link open-link--disabled">Geplant</span>
+      )}
+    </article>
+  );
+}
+
+function SystemsPanel({
+  services,
+  serviceInfoById,
+  theme,
+  onShowAll,
+  showAllButton = true
+}: {
+  services: PublicService[];
+  serviceInfoById: Map<string, ServiceInfoResult>;
+  theme: ThemeId;
+  onShowAll: () => void;
+  showAllButton?: boolean;
+}) {
+  return (
+    <section className="systems-panel" aria-labelledby="systems-title">
+      <div className="section-heading">
+        <span>Laufende Systeme</span>
+        <h2 id="systems-title">Verfügbare Dienste</h2>
+      </div>
+      <div className="system-list">
+        {services.length ? (
+          services.map((service) => (
+            <SystemRow
+              key={service.id}
+              service={service}
+              serviceInfo={serviceInfoById.get(service.id)}
+              theme={theme}
+            />
+          ))
+        ) : (
+          <div className="panel-empty">Noch keine öffentlichen Dienste geladen.</div>
+        )}
+      </div>
+      {showAllButton ? (
+        <button className="show-all-button" onClick={onShowAll} type="button">
+          <SlidersHorizontal size={15} aria-hidden="true" />
+          Alle Systeme anzeigen
+        </button>
+      ) : null}
+    </section>
+  );
+}
+
+function NewsPanel({
+  updates
+}: {
+  updates: ReturnType<typeof publicUpdates>;
+}) {
+  const [feature, ...items] = updates;
+
+  return (
+    <section className="news-panel" aria-labelledby="news-title">
+      <div className="section-heading">
+        <span>Neuigkeiten</span>
+        <h2 id="news-title">Öffentliche Updates</h2>
+      </div>
+      {feature ? (
+        <div className="news-layout">
+          <article className="feature-news">
+            <span className="news-badge">{feature.serviceId}</span>
+            <time dateTime={feature.date}>{formatDate(feature.date)}</time>
+            <h3>{feature.title}</h3>
+            <p>{feature.text}</p>
+            {feature.href ? (
+              <a href={feature.href}>
+                Öffnen
+                <ArrowUpRight size={16} aria-hidden="true" />
+              </a>
+            ) : null}
+          </article>
+          <div className="news-list">
+            {items.slice(0, 3).map((item) => (
+              <article className="news-item" key={item.id}>
+                <span className="news-item__icon" aria-hidden="true">
+                  <FileText size={22} />
+                </span>
+                <div>
+                  <time dateTime={item.date}>{formatDate(item.date)}</time>
+                  <h3>{item.title}</h3>
+                  <p>{item.text}</p>
+                </div>
+                {item.href ? <ArrowUpRight size={17} aria-hidden="true" /> : null}
+              </article>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="news-empty">
+          <FileText size={24} aria-hidden="true" />
+          <h3>Keine öffentlichen News verfügbar</h3>
+          <p>Dieser Bereich bleibt leer, bis ein Dienst freigegebene Updates über die Service-Info-API liefert.</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function GlobalChat({
+  feed,
+  serviceHref,
+  theme
+}: {
+  feed: ServiceFeed | undefined;
+  serviceHref: string | null;
+  theme: ThemeId;
+}) {
+  const messages = feed?.items ?? [];
+  const chatHref = feed?.href ?? serviceHref;
+
+  return (
+    <section className="global-chat" aria-labelledby="global-chat-title">
+      <div className="chat-header">
+        <div>
+          <span>Globaler Chat</span>
+          <h2 id="global-chat-title">{feed?.title ?? "Chat-Channel"}</h2>
+          <small>{messages.length ? `${messages.length} Nachrichten geladen` : "Keine Nachrichten geladen"}</small>
+        </div>
+      </div>
+      <div className="message-list">
+        {messages.length ? (
+          messages.map((message) => (
+            <article className="chat-message" key={message.id}>
+              <span className="chat-avatar chat-avatar--live" aria-hidden="true">
+                {message.author
+                  .split(" ")
+                  .map((part) => part[0])
+                  .join("")
+                  .slice(0, 2)}
+              </span>
+              <div>
+                <header>
+                  <strong>{message.author}</strong>
+                  <time dateTime={message.createdAt}>{formatFeedTime(message.createdAt)}</time>
+                </header>
+                <p>{message.text}</p>
+              </div>
+            </article>
+          ))
+        ) : (
+          <div className="chat-empty">
+            <Slack size={24} aria-hidden="true" />
+            <h3>Keine freigegebenen Chat-Nachrichten</h3>
+            <p>Der Bereich zeigt erst Nachrichten, wenn die Rocket.Chat-Brücke echte Channel-Daten liefert.</p>
+          </div>
+        )}
+      </div>
+      <div className="chat-footer">
+        {chatHref ? (
+          <a className="chat-open" href={withThemeParam(chatHref, theme)}>
+            Im Chat öffnen
+            <ArrowUpRight size={17} aria-hidden="true" />
+          </a>
+        ) : (
+          <span className="chat-open chat-open--disabled">Chat-Link nicht verfügbar</span>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function SystemStatusPanel({
+  serviceInfo,
+  snapshot
+}: {
+  serviceInfo: ServiceInfoSnapshot | null;
+  snapshot: HealthSnapshot | null;
+}) {
+  const services = snapshot?.services ?? [];
+  const activeServices = services.filter((service) => service.state !== "planned");
+  const onlineCount = activeServices.filter((service) => service.state === "online").length;
+  const averageResponseMs = averageResponse(activeServices);
+  const infoServices = serviceInfo?.services ?? [];
+  const infoAvailable = infoServices.filter((service) => service.status === "available").length;
+  const statusChart = firstStatusChart(serviceInfo);
+  const chartValues = statusChart?.points.map((point) => point.value).slice(-76) ?? [];
+  const maxChartValue = Math.max(1, ...chartValues);
+
+  return (
+    <section className="status-dashboard" aria-labelledby="system-status-title">
+      <div className="section-heading">
+        <span>Systemstatus</span>
+        <h2 id="system-status-title">{overallLabels[snapshot?.overall ?? "checking"]}</h2>
+      </div>
+      <div className="status-metrics">
+        <div><strong>{onlineCount}/{activeServices.length || services.length || 0}</strong><span>Online</span></div>
+        <div><strong>{averageResponseMs !== null ? `${averageResponseMs} ms` : "n/a"}</strong><span>Ø Antwort</span></div>
+        <div><strong>{infoAvailable}/{infoServices.length || services.length || 0}</strong><span>Info APIs</span></div>
+        <div><strong>{formatTime(snapshot?.generatedAt ?? null)}</strong><span>Update</span></div>
+      </div>
+      {chartValues.length ? (
+        <div className="status-bars" aria-label={statusChart?.title ?? "Service-Info Diagramm"}>
+          {chartValues.map((height, index) => (
+            <span
+              key={`${height}-${index}`}
+              style={{ "--bar-height": `${Math.max(10, Math.round((height / maxChartValue) * 100))}%` } as React.CSSProperties}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="status-bars-empty">Keine Diagrammdaten aus Service-Info verfügbar.</div>
+      )}
+      <div className="status-updated">
+        Letzte Aktualisierung: {formatTime(snapshot?.generatedAt ?? null)}
+        <RefreshCw size={14} aria-hidden="true" />
+      </div>
+    </section>
+  );
+}
+
+function PageHeader({
+  eyebrow,
+  title
+}: {
+  eyebrow: string;
+  title: string;
+}) {
+  return (
+    <section className="page-header" aria-labelledby={`page-${title.toLowerCase()}-title`}>
+      <VoiceWave />
       <div>
-        {(["de", "en"] as const).map((option) => (
-          <button
-            aria-label={t.language.switchTo[option]}
-            aria-pressed={language === option}
-            className={language === option ? "is-active" : ""}
-            key={option}
-            onClick={() => onLanguageChange(option)}
-            type="button"
-          >
-            {option.toUpperCase()}
-          </button>
+        <span>{eyebrow}</span>
+        <h1 id={`page-${title.toLowerCase()}-title`}>{title}</h1>
+      </div>
+    </section>
+  );
+}
+
+function OverviewMetrics({
+  feed,
+  serviceInfo,
+  snapshot
+}: {
+  feed: ServiceFeed | undefined;
+  serviceInfo: ServiceInfoSnapshot | null;
+  snapshot: HealthSnapshot | null;
+}) {
+  const services = snapshot?.services ?? [];
+  const activeServices = services.filter((service) => service.state !== "planned");
+  const onlineCount = activeServices.filter((service) => service.state === "online").length;
+  const infoServices = serviceInfo?.services ?? [];
+  const infoAvailable = serviceMetricValue(infoServices, "available");
+  const averageResponseMs = averageResponse(activeServices);
+
+  return (
+    <section className="overview-metrics" aria-label="Live Kennzahlen">
+      <div><strong>{onlineCount}/{activeServices.length || services.length || 0}</strong><span>Systeme online</span></div>
+      <div><strong>{averageResponseMs !== null ? `${averageResponseMs} ms` : "n/a"}</strong><span>Ø Antwort</span></div>
+      <div><strong>{infoAvailable}/{infoServices.length || services.length || 0}</strong><span>Info APIs</span></div>
+      <div><strong>{feed?.items.length ?? 0}</strong><span>Chat-Nachrichten</span></div>
+    </section>
+  );
+}
+
+function MetricGrid({ metrics }: { metrics: ServiceMetric[] }) {
+  return (
+    <div className="detail-metric-grid" aria-label="Service-Metriken">
+      {metrics.map((metric) => (
+        <div key={metric.id}>
+          <span>{metric.label}</span>
+          <strong>{metricValue(metric)}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ChartPreview({ chart }: { chart: ServiceChart }) {
+  const values = chart.points.slice(-24);
+  const maxValue = Math.max(1, ...values.map((point) => point.value));
+
+  return (
+    <div className="detail-chart" aria-label={chart.title}>
+      <header>
+        <span>{chart.title}</span>
+        {chart.unit ? <small>{chart.unit}</small> : null}
+      </header>
+      <div>
+        {values.map((point, index) => (
+          <span
+            key={`${point.label}-${index}`}
+            title={`${point.label}: ${point.value}${chart.unit ?? ""}`}
+            style={{ "--bar-height": `${Math.max(8, Math.round((point.value / maxValue) * 100))}%` } as React.CSSProperties}
+          />
         ))}
       </div>
     </div>
   );
 }
 
+function SystemDetailCard({
+  service,
+  serviceInfo,
+  theme
+}: {
+  service: PublicService;
+  serviceInfo: ServiceInfoResult | undefined;
+  theme: ThemeId;
+}) {
+  const Icon = iconMap[service.icon];
+  const data = serviceInfo?.data;
+  const metrics = data?.metrics ?? [];
+  const charts = data?.charts ?? [];
+  const sections = data?.sections ?? [];
+  const actions = data?.actions ?? [];
+
+  return (
+    <article className={`system-detail-card system-row--${rowTone(service)}`}>
+      <header>
+        <div className="system-row__icon" aria-hidden="true">
+          <Icon size={25} strokeWidth={2.1} />
+        </div>
+        <div>
+          <h3>{service.name}</h3>
+          <p>{data?.summary ?? service.description}</p>
+        </div>
+        <StatusPill state={service.state} />
+      </header>
+
+      <dl className="service-facts">
+        <div><dt>Health</dt><dd>{service.message}</dd></div>
+        <div><dt>Antwort</dt><dd>{service.responseMs !== null ? `${service.responseMs} ms` : "n/a"}</dd></div>
+        <div><dt>Update</dt><dd>{formatTime(service.updatedAt)}</dd></div>
+        <div><dt>Info API</dt><dd>{infoStateLabels[serviceInfo?.status ?? service.infoState]}</dd></div>
+      </dl>
+
+      {metrics.length ? <MetricGrid metrics={metrics} /> : <p className="detail-empty">Keine öffentlichen Metriken geliefert.</p>}
+      {charts.length ? charts.slice(0, 2).map((chart) => <ChartPreview chart={chart} key={chart.id} />) : null}
+      {sections.length ? (
+        <div className="detail-sections">
+          {sections.slice(0, 2).map((section) => (
+            <section key={section.id}>
+              <h4>{section.title}</h4>
+              <p>{section.body}</p>
+            </section>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="detail-actions">
+        {actions.length ? (
+          actions.map((action) => (
+            <a href={withThemeParam(action.href, theme)} key={action.id}>
+              {action.label}
+              <ArrowUpRight size={16} aria-hidden="true" />
+            </a>
+          ))
+        ) : service.href ? (
+          <a href={withThemeParam(service.href, theme)}>
+            Dienst öffnen
+            <ArrowUpRight size={16} aria-hidden="true" />
+          </a>
+        ) : (
+          <span>Kein öffentlicher Link verfügbar</span>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function OverviewView({
+  feed,
+  serviceInfo,
+  serviceInfoById,
+  services,
+  snapshot,
+  theme,
+  updates,
+  onShowSystems
+}: {
+  feed: ServiceFeed | undefined;
+  serviceInfo: ServiceInfoSnapshot | null;
+  serviceInfoById: Map<string, ServiceInfoResult>;
+  services: PublicService[];
+  snapshot: HealthSnapshot | null;
+  theme: ThemeId;
+  updates: ReturnType<typeof publicUpdates>;
+  onShowSystems: () => void;
+}) {
+  return (
+    <div className="page-view">
+      <PageHeader eyebrow="Cockpit" title="Übersicht" />
+      <OverviewMetrics feed={feed} serviceInfo={serviceInfo} snapshot={snapshot} />
+      <SystemsPanel
+        services={services}
+        serviceInfoById={serviceInfoById}
+        theme={theme}
+        onShowAll={onShowSystems}
+        showAllButton={false}
+      />
+      <NewsPanel updates={updates} />
+    </div>
+  );
+}
+
+function SystemsView({
+  serviceInfoById,
+  services,
+  theme
+}: {
+  serviceInfoById: Map<string, ServiceInfoResult>;
+  services: PublicService[];
+  theme: ThemeId;
+}) {
+  return (
+    <div className="page-view">
+      <PageHeader eyebrow="Dienste" title="Systeme" />
+      <section className="page-panel">
+        <div className="section-heading">
+          <span>Health & Service Info</span>
+          <h2>Öffentliche Systemdetails</h2>
+        </div>
+        <div className="system-detail-grid">
+          {services.length ? (
+            services.map((service) => (
+              <SystemDetailCard
+                key={service.id}
+                service={service}
+                serviceInfo={serviceInfoById.get(service.id)}
+                theme={theme}
+              />
+            ))
+          ) : (
+            <div className="panel-empty">Noch keine öffentlichen Dienste geladen.</div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ChannelsView({
+  feed,
+  serviceHref,
+  theme
+}: {
+  feed: ServiceFeed | undefined;
+  serviceHref: string | null;
+  theme: ThemeId;
+}) {
+  return (
+    <div className="page-view">
+      <PageHeader eyebrow="Kommunikation" title="Kanäle" />
+      <section className="page-panel page-panel--full">
+        <div className="section-heading">
+          <span>Rocket.Chat Bridge</span>
+          <h2>{feed?.title ?? "Chat-Channel"}</h2>
+        </div>
+        <div className="channel-layout">
+          <GlobalChat feed={feed} serviceHref={serviceHref} theme={theme} />
+          <div className="channel-meta">
+            <div><span>Quelle</span><strong>{feed ? "Rocket.Chat API" : "Nicht verbunden"}</strong></div>
+            <div><span>Nachrichten</span><strong>{feed?.items.length ?? 0}</strong></div>
+            <div><span>Letzte Nachricht</span><strong>{feed?.items[0] ? formatFeedTime(feed.items[0].createdAt) : "n/a"}</strong></div>
+            <div><span>Channel-Link</span><strong>{feed?.href || serviceHref ? "Verfügbar" : "Fehlt"}</strong></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function StatusServiceGrid({
+  serviceInfoById,
+  services
+}: {
+  serviceInfoById: Map<string, ServiceInfoResult>;
+  services: PublicService[];
+}) {
+  return (
+    <section className="page-panel">
+      <div className="section-heading">
+        <span>Statusmatrix</span>
+        <h2>Checks pro Dienst</h2>
+      </div>
+      <div className="status-service-grid">
+        {services.map((service) => {
+          const info = serviceInfoById.get(service.id);
+          return (
+            <article key={service.id}>
+              <header>
+                <h3>{service.name}</h3>
+                <StatusPill state={service.state} />
+              </header>
+              <dl className="service-facts">
+                <div><dt>Health</dt><dd>{service.message}</dd></div>
+                <div><dt>Antwort</dt><dd>{service.responseMs !== null ? `${service.responseMs} ms` : "n/a"}</dd></div>
+                <div><dt>Info API</dt><dd>{infoStateLabels[info?.status ?? service.infoState]}</dd></div>
+                <div><dt>Info Antwort</dt><dd>{info?.responseMs !== null && info?.responseMs !== undefined ? `${info.responseMs} ms` : "n/a"}</dd></div>
+              </dl>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function StatusView({
+  serviceInfo,
+  serviceInfoById,
+  services,
+  snapshot
+}: {
+  serviceInfo: ServiceInfoSnapshot | null;
+  serviceInfoById: Map<string, ServiceInfoResult>;
+  services: PublicService[];
+  snapshot: HealthSnapshot | null;
+}) {
+  return (
+    <div className="page-view">
+      <PageHeader eyebrow="Betrieb" title="Status" />
+      <SystemStatusPanel serviceInfo={serviceInfo} snapshot={snapshot} />
+      <StatusServiceGrid serviceInfoById={serviceInfoById} services={services} />
+    </div>
+  );
+}
+
+function NewsView({ updates }: { updates: ReturnType<typeof publicUpdates> }) {
+  return (
+    <div className="page-view">
+      <PageHeader eyebrow="Updates" title="News" />
+      <section className="page-panel">
+        <div className="section-heading">
+          <span>Service-Info Sections</span>
+          <h2>Öffentliche Meldungen</h2>
+        </div>
+        {updates.length ? (
+          <div className="news-archive">
+            {updates.map((update) => (
+              <article key={update.id}>
+                <time dateTime={update.date}>{formatDate(update.date)}</time>
+                <h3>{update.title}</h3>
+                <p>{update.text}</p>
+                {update.href ? (
+                  <a href={update.href}>
+                    Öffnen
+                    <ArrowUpRight size={16} aria-hidden="true" />
+                  </a>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="news-empty">
+            <FileText size={24} aria-hidden="true" />
+            <h3>Keine öffentlichen News verfügbar</h3>
+            <p>Dieser Bereich bleibt leer, bis ein Dienst freigegebene Updates über die Service-Info-API liefert.</p>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function ActivePage({
+  activeSection,
+  feed,
+  serviceHref,
+  serviceInfo,
+  serviceInfoById,
+  services,
+  snapshot,
+  theme,
+  updates,
+  onShowSystems
+}: {
+  activeSection: NavSection;
+  feed: ServiceFeed | undefined;
+  serviceHref: string | null;
+  serviceInfo: ServiceInfoSnapshot | null;
+  serviceInfoById: Map<string, ServiceInfoResult>;
+  services: PublicService[];
+  snapshot: HealthSnapshot | null;
+  theme: ThemeId;
+  updates: ReturnType<typeof publicUpdates>;
+  onShowSystems: () => void;
+}) {
+  switch (activeSection) {
+    case "channels":
+      return <ChannelsView feed={feed} serviceHref={serviceHref} theme={theme} />;
+    case "news":
+      return <NewsView updates={updates} />;
+    case "status":
+      return <StatusView serviceInfo={serviceInfo} serviceInfoById={serviceInfoById} services={services} snapshot={snapshot} />;
+    case "systems":
+      return <SystemsView serviceInfoById={serviceInfoById} services={services} theme={theme} />;
+    case "overview":
+    default:
+      return (
+        <OverviewView
+          feed={feed}
+          serviceInfo={serviceInfo}
+          serviceInfoById={serviceInfoById}
+          services={services}
+          snapshot={snapshot}
+          theme={theme}
+          updates={updates}
+          onShowSystems={onShowSystems}
+        />
+      );
+  }
+}
+
+function MobilePage({
+  feed,
+  serviceHref,
+  serviceInfo,
+  serviceInfoById,
+  services,
+  snapshot,
+  theme,
+  updates,
+  onShowSystems
+}: {
+  feed: ServiceFeed | undefined;
+  serviceHref: string | null;
+  serviceInfo: ServiceInfoSnapshot | null;
+  serviceInfoById: Map<string, ServiceInfoResult>;
+  services: PublicService[];
+  snapshot: HealthSnapshot | null;
+  theme: ThemeId;
+  updates: ReturnType<typeof publicUpdates>;
+  onShowSystems: () => void;
+}) {
+  return (
+    <div className="page-view page-view--mobile">
+      <OverviewMetrics feed={feed} serviceInfo={serviceInfo} snapshot={snapshot} />
+      <SystemsPanel services={services} serviceInfoById={serviceInfoById} theme={theme} onShowAll={onShowSystems} />
+      <GlobalChat feed={feed} serviceHref={serviceHref} theme={theme} />
+      <SystemStatusPanel serviceInfo={serviceInfo} snapshot={snapshot} />
+      <NewsPanel updates={updates} />
+    </div>
+  );
+}
+
 function App() {
   const { snapshot, socketState } = useHealth();
-  const serviceInfoSnapshot = useServiceInfo();
+  const serviceInfo = useServiceInfo();
+  const isMobile = useIsMobile();
   const [activeTheme, setActiveTheme] = useState<ThemeId>(() => applyInitialTheme());
-  const [language, setLanguage] = useState<Language>(() => applyInitialLanguage());
-  const [activeLogId, setActiveLogId] = useState(logbookEntries[0]!.id);
-  const [activeServiceId, setActiveServiceId] = useState<string | null>(null);
-  const lastPointerAt = useRef(Date.now());
+  const [activeSection, setActiveSection] = useState<NavSection>("overview");
+
   const services = snapshot?.services ?? [];
   const activeServices = services.filter((service) => service.state !== "planned");
   const plannedServices = services.filter((service) => service.state === "planned");
   const visibleServices = [...activeServices, ...plannedServices];
-  const t = translations[language];
-
-  const onlineCount = useMemo(
-    () => activeServices.filter((service) => service.state === "online").length,
-    [activeServices]
-  );
-  const activeService = visibleServices.find((service) => service.id === activeServiceId) ?? visibleServices[0];
   const serviceInfoById = useMemo(
-    () => new Map((serviceInfoSnapshot?.services ?? []).map((serviceInfo) => [serviceInfo.serviceId, serviceInfo])),
-    [serviceInfoSnapshot]
+    () => new Map((serviceInfo?.services ?? []).map((service) => [service.serviceId, service])),
+    [serviceInfo]
   );
+  const slackService = visibleServices.find((service) => service.id === "slack");
+  const slackFeed = serviceInfoById.get("slack")?.data?.feeds?.[0];
+  const updates = useMemo(() => publicUpdates(serviceInfo), [serviceInfo]);
+  const onlineCount = activeServices.filter((service) => service.state === "online").length;
 
   function changeTheme(theme: ThemeId) {
     const update = () => {
@@ -1094,30 +1370,9 @@ function App() {
     update();
   }
 
-  function changeLanguage(nextLanguage: Language) {
-    setLanguage(nextLanguage);
-    applyLanguage(nextLanguage);
+  function selectSection(section: NavSection) {
+    setActiveSection(section);
   }
-
-  useEffect(() => {
-    if (!activeServiceId && visibleServices[0]) {
-      setActiveServiceId(visibleServices[0].id);
-    }
-  }, [activeServiceId, visibleServices]);
-
-  useEffect(() => {
-    const markPointer = () => {
-      lastPointerAt.current = Date.now();
-    };
-    window.addEventListener("mousemove", markPointer);
-    window.addEventListener("pointerdown", markPointer);
-    window.addEventListener("keydown", markPointer);
-    return () => {
-      window.removeEventListener("mousemove", markPointer);
-      window.removeEventListener("pointerdown", markPointer);
-      window.removeEventListener("keydown", markPointer);
-    };
-  }, []);
 
   useEffect(() => {
     let frame = 0;
@@ -1136,113 +1391,68 @@ function App() {
     };
   }, []);
 
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      if (Date.now() - lastPointerAt.current < POINTER_IDLE_MS) {
-        return;
-      }
-      setActiveLogId((current) => {
-        const index = Math.max(0, logbookEntries.findIndex((entry) => entry.id === current));
-        return logbookEntries[(index + 1) % logbookEntries.length]!.id;
-      });
-      setActiveServiceId((current) => {
-        if (visibleServices.length === 0) {
-          return current;
-        }
-        const index = Math.max(0, visibleServices.findIndex((service) => service.id === current));
-        return visibleServices[(index + 1) % visibleServices.length]?.id ?? current;
-      });
-    }, IDLE_ROTATION_MS);
-
-    return () => window.clearInterval(timer);
-  }, [visibleServices]);
-
   return (
-    <main>
-      <div className="grid-runners" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-      </div>
-      <section className="hero" aria-labelledby="page-title">
-        <div className="hero__content">
-          <div className="eyebrow">
-            <Activity size={16} aria-hidden="true" />
-            {t.hero.eyebrow}
-          </div>
-          <p className="domain-label" id="page-title">schnick-schnack.info</p>
-          <Wordmark />
-          <p>{t.hero.text}</p>
-        </div>
-        <div className="hero__controls">
-          <aside className="status-panel" aria-label={t.aria.overallStatus}>
-            <span className={`status-dot status-dot--${snapshot?.overall ?? "checking"}`} />
-            <div>
-              <strong>{snapshot ? t.status.overall[snapshot.overall] : t.status.overall.checking}</strong>
-              <span>{t.services.onlineCount(onlineCount, activeServices.length || 3)}</span>
-            </div>
-          </aside>
-          <LanguageSwitch language={language} onLanguageChange={changeLanguage} t={t} />
-        </div>
-      </section>
-
-      <section className="live-strip" aria-label={t.aria.liveUpdates}>
-        <div>
-          <RefreshCw size={17} aria-hidden="true" className={socketState === "live" ? "spin-soft" : ""} />
-          <span>{socketState === "live" ? t.live.live : t.live.fallback}</span>
-        </div>
-        <span>{t.live.lastUpdate}: {formatTime(snapshot?.generatedAt ?? null, language)}</span>
-      </section>
-
-      <Logbook
-        activeLogId={activeLogId}
-        language={language}
-        onOpen={setActiveLogId}
-        t={t}
+    <div className="openvoice-shell">
+      <Sidebar
+        activeSection={activeSection}
+        activeTheme={activeTheme}
+        onSectionChange={selectSection}
+        onThemeChange={changeTheme}
       />
 
-      <section className="section-block" aria-labelledby="services-title">
-        <div className="panel-heading">
-          <div>
-            <h2 id="services-title">{t.services.title}</h2>
-            <p>{t.services.subtitle}</p>
-          </div>
-        </div>
-
-        <div className="module-layout">
-          <div className="service-grid" data-card-group>
-            {services.length > 0 ? (
-              visibleServices.map((service) => (
-                <ServiceCard
-                  key={service.id}
-                  service={service}
-                  generatedAt={snapshot?.generatedAt ?? null}
-                  isActive={activeService?.id === service.id}
-                  language={language}
-                  onOpen={() => setActiveServiceId(service.id)}
-                  t={t}
-                />
-              ))
-            ) : (
-              <>
-                <div className="skeleton" />
-                <div className="skeleton" />
-                <div className="skeleton" />
-                <div className="skeleton" />
-              </>
-            )}
-          </div>
-          <ServiceDetail
-            service={activeService}
-            generatedAt={snapshot?.generatedAt ?? null}
-            language={language}
-            serviceInfo={activeService ? serviceInfoById.get(activeService.id) : undefined}
-            t={t}
+      <main className="voice-main">
+        <TopBar
+          activeTheme={activeTheme}
+          onlineCount={onlineCount}
+          serviceCount={activeServices.length || visibleServices.length}
+          onStatusClick={() => selectSection("status")}
+        />
+        {isMobile ? (
+          <MobilePage
+            feed={slackFeed}
+            serviceHref={slackService?.href ?? null}
+            serviceInfo={serviceInfo}
+            serviceInfoById={serviceInfoById}
+            services={visibleServices}
+            snapshot={snapshot}
+            theme={activeTheme}
+            updates={updates}
+            onShowSystems={() => selectSection("systems")}
           />
-        </div>
-      </section>
-      <ThemeDock activeTheme={activeTheme} onThemeChange={changeTheme} t={t} />
-    </main>
+        ) : (
+          <ActivePage
+            activeSection={activeSection}
+            feed={slackFeed}
+            serviceHref={slackService?.href ?? null}
+            serviceInfo={serviceInfo}
+            serviceInfoById={serviceInfoById}
+            services={visibleServices}
+            snapshot={snapshot}
+            theme={activeTheme}
+            updates={updates}
+            onShowSystems={() => selectSection("systems")}
+          />
+        )}
+      </main>
+
+      {!isMobile ? (
+        <aside className="voice-rail" aria-label="Kommunikation und Status">
+          <GlobalChat
+            feed={slackFeed}
+            serviceHref={slackService?.href ?? null}
+            theme={activeTheme}
+          />
+          <SystemStatusPanel
+            serviceInfo={serviceInfo}
+            snapshot={snapshot}
+          />
+        </aside>
+      ) : null}
+
+      <span className={`socket-state socket-state--${socketState}`} aria-live="polite">
+        {socketState === "live" ? "Live" : "Fallback"}
+      </span>
+    </div>
   );
 }
 

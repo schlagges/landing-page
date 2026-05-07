@@ -5,9 +5,20 @@ services:
     network_mode: host
     restart: unless-stopped
     environment:
-      HOST: 127.0.0.1
-      PORT: 8090
-      HEALTH_INTERVAL_MS: 10000
-      HEALTH_VOICE_URL: http://127.0.0.1:3000/
-      HEALTH_AUTH_URL: http://127.0.0.1:8081/realms/master/.well-known/openid-configuration
-      HEALTH_REALTIME_URL: http://127.0.0.1:7880/
+      HOST: 0.0.0.0
+      PORT: ${PORT:-8090}
+      HEALTH_INTERVAL_MS: ${HEALTH_INTERVAL_MS:-10000}
+      INFO_TIMEOUT_MS: ${INFO_TIMEOUT_MS:-3500}
+      HEALTH_VOICE_URL: ${HEALTH_VOICE_URL:-http://127.0.0.1:3000/}
+      HEALTH_AUTH_URL: ${HEALTH_AUTH_URL:-http://127.0.0.1:8081/realms/master/.well-known/openid-configuration}
+      HEALTH_SLACK_URL: ${HEALTH_SLACK_URL:-http://127.0.0.1:3010/}
+      HEALTH_GITLAB_URL: ${HEALTH_GITLAB_URL:-https://labs.schnick-schnack.info/schnick-schnack/landing-page}
+      INFO_VOICE_URL: ${INFO_VOICE_URL:-http://127.0.0.1:3000/.well-known/schnick-schnack/service-info.json}
+      INFO_SLACK_URL: ${INFO_SLACK_URL:-http://127.0.0.1:3021/.well-known/schnick-schnack/service-info.json}
+      INFO_GITLAB_URL: ${INFO_GITLAB_URL:-https://labs.schnick-schnack.info/.well-known/schnick-schnack/service-info.json}
+      ROCKET_CHAT_URL: ${ROCKET_CHAT_URL:-http://127.0.0.1:3010/}
+      ROCKET_CHAT_CHANNEL: ${ROCKET_CHAT_CHANNEL:-landing-feed}
+      ROCKET_CHAT_CHANNEL_URL: ${ROCKET_CHAT_CHANNEL_URL:-https://chat.schnick-schnack.info/channel/landing-feed}
+      ROCKET_CHAT_MESSAGE_LIMIT: ${ROCKET_CHAT_MESSAGE_LIMIT:-5}
+      ROCKET_CHAT_USER_ID: ${ROCKET_CHAT_USER_ID:-}
+      ROCKET_CHAT_AUTH_TOKEN: ${ROCKET_CHAT_AUTH_TOKEN:-}

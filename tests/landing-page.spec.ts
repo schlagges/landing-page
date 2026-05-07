@@ -1,148 +1,128 @@
 import { expect, test } from "@playwright/test";
 
-test("service card updates the fixed module detail panel on hover", async ({ page }) => {
-  await page.goto("/");
-
-  const card = page.getByLabel("Voice Details anzeigen");
-  const shell = card.locator(".service-card__shell");
-  await expect(card).toBeVisible();
-  const detail = page.getByLabel("Modul Detail");
-  await expect(detail).toBeVisible();
-  const initialBox = await shell.boundingBox();
-  expect(initialBox).not.toBeNull();
-
-  await card.hover();
-  await expect(card).toHaveAttribute("aria-selected", "true");
-  await expect(card).toHaveClass(/is-selected/);
-  await expect(card.getByText("FOCUS")).toBeVisible();
-  await expect(detail.getByText("Service Detail")).toBeVisible();
-  await expect(detail.getByRole("link", { name: /Öffnen/i })).toBeVisible();
-  await expect(detail.getByText(/API offen|API aktiv|API-Prüfung|API Fehler/)).toBeVisible();
-  const detailBox = await detail.boundingBox();
-  expect(detailBox).not.toBeNull();
-  expect(detailBox!.width).toBeGreaterThan(initialBox!.width * 1.5);
-
-  await page.getByLabel("Auth / SSO Details anzeigen").hover();
-  await page.waitForTimeout(420);
-  await expect(detail.getByRole("heading", { name: "Auth / SSO" })).toBeVisible();
-  await expect(page.getByLabel("Auth / SSO Details anzeigen")).toHaveAttribute("aria-selected", "true");
-  await expect(card).toHaveAttribute("aria-selected", "false");
-});
-
 test("service info OpenAPI and aggregation endpoints are available", async ({ page }) => {
   const openApiResponse = await page.request.get("/api/openapi.json");
   expect(openApiResponse.ok()).toBe(true);
   const openApi = await openApiResponse.json();
   expect(openApi.openapi).toBe("3.1.0");
   expect(openApi.paths["/.well-known/schnick-schnack/service-info.json"]).toBeTruthy();
+  expect(openApi.components.schemas.ServiceFeed).toBeTruthy();
+  expect(openApi.components.schemas.ServiceInfo.properties.feeds).toBeTruthy();
 
   const serviceInfoResponse = await page.request.get("/api/service-info");
   expect(serviceInfoResponse.ok()).toBe(true);
   const serviceInfo = await serviceInfoResponse.json();
   expect(Array.isArray(serviceInfo.services)).toBe(true);
   expect(serviceInfo.services.some((service: { serviceId: string }) => service.serviceId === "voice")).toBe(true);
+  expect(serviceInfo.services.some((service: { serviceId: string }) => service.serviceId === "slack")).toBe(true);
+  expect(serviceInfo.services.some((service: { serviceId: string }) => service.serviceId === "gitlab")).toBe(true);
 
   const healthResponse = await page.request.get("/api/health");
   expect(healthResponse.ok()).toBe(true);
   const health = await healthResponse.json();
-  expect(Array.isArray(health.services)).toBe(true);
   const gitlab = health.services.find((service: { id: string; href: string | null }) => service.id === "gitlab");
-  expect(gitlab).toBeTruthy();
   expect(gitlab?.href).toBe("https://labs.schnick-schnack.info/schnick-schnack/landing-page");
 });
 
-test("service cards show a reverse refresh countdown", async ({ page }) => {
+test("desktop renders the Schnick Schnack app layout from the reference", async ({ page }) => {
   await page.goto("/");
 
-  const card = page.getByLabel("Voice Details anzeigen");
-  const countdown = card.locator(".service-card__face--front .refresh-countdown");
-  const dial = card.locator(".service-card__face--front .refresh-countdown__dial");
-  await expect(countdown).toBeVisible();
-
-  const initialLabel = await countdown.textContent();
-  const initialBackground = await dial.evaluate((element) => getComputedStyle(element).backgroundImage);
-  await page.waitForTimeout(650);
-  const laterLabel = await countdown.textContent();
-  const laterBackground = await dial.evaluate((element) => getComputedStyle(element).backgroundImage);
-
-  await expect(dial).toBeVisible();
-  expect(laterBackground).not.toBe(initialBackground);
-  expect(Number.parseInt(laterLabel ?? "0", 10)).toBeLessThanOrEqual(Number.parseInt(initialLabel ?? "0", 10));
+  await expect(page.getByLabel("Schnick Schnack Navigation")).toBeVisible();
+  await expect(page.getByLabel("schnick-schnack.info Startseite")).toBeVisible();
+  await expect(page.getByText("schnick-schnack.info")).toBeVisible();
+  await expect(page.getByLabel("Lu To Bo")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Übersicht" })).toHaveClass(/is-active/);
+  await expect(page.getByRole("heading", { name: "Übersicht" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Voice. Connect. Collaborate." })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Verfügbare Dienste" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Öffentliche Updates" })).toBeVisible();
+  await expect(page.getByText("Globaler Chat")).toBeVisible();
+  await expect(page.locator(".status-dashboard").getByText("Systemstatus")).toBeVisible();
 });
 
-test("wordmark reorders after the hold interval", async ({ page }) => {
+test("left navigation changes the active section", async ({ page }) => {
   await page.goto("/");
 
-  const wordmark = page.locator(".wordmark");
-  const initial = await wordmark.getAttribute("aria-label");
+  const systems = page.getByRole("button", { name: "Systeme", exact: true });
+  await systems.click();
+  await expect(systems).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("heading", { name: "Öffentliche Systemdetails" })).toBeVisible();
 
-  await page.waitForTimeout(13200);
-  const updated = await wordmark.getAttribute("aria-label");
-
-  expect(initial).toMatch(/^(Lu|To|Bo){3}$/);
-  expect(updated).toMatch(/^(Lu|To|Bo){3}$/);
-  expect(updated).not.toBe(initial);
+  const news = page.getByRole("button", { name: "News", exact: true });
+  await news.click();
+  await expect(news).toHaveAttribute("aria-pressed", "true");
+  await expect(systems).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByRole("heading", { name: "Öffentliche Meldungen" })).toBeVisible();
 });
 
-test("live status is presented as a HUD card", async ({ page }) => {
+test("side navigation opens detailed status and channel views", async ({ page }) => {
   await page.goto("/");
 
-  const liveStatus = page.getByLabel("Live Aktualisierung");
-  await expect(liveStatus).toBeVisible();
-  await expect(liveStatus).toContainText(/Live per WebSocket|Fallback per Abfrage/);
+  await page.getByRole("button", { name: "Status", exact: true }).click();
+  await expect(page.getByText("Statusmatrix")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Checks pro Dienst" })).toBeVisible();
 
-  const borderRadius = await liveStatus.evaluate((element) => getComputedStyle(element).borderRadius);
-  const background = await liveStatus.evaluate((element) => getComputedStyle(element).backgroundImage);
-
-  expect(borderRadius).not.toBe("0px");
-  expect(background).toContain("linear-gradient");
+  await page.getByRole("button", { name: "Kanäle", exact: true }).click();
+  await expect(page.getByText("Rocket.Chat Bridge")).toBeVisible();
+  await expect(page.getByRole("main").getByRole("heading", { name: "Chat-Channel" }).first()).toBeVisible();
 });
 
-test("logbook is prominent above modules", async ({ page }) => {
+test("mobile uses a stacked dashboard without sidebar navigation", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
 
-  const logbook = page.locator(".logbook");
-  const entries = logbook.locator(".logbook__entries");
-  const newsDetail = page.getByLabel("News Detail");
-  await expect(logbook).toBeVisible();
-  await expect(logbook.getByRole("heading", { name: "Was passiert ist" })).toBeVisible();
-  await expect(entries.getByText("Portal online")).toBeVisible();
-  await expect(entries.getByText("HUD Interface aktiviert")).toBeVisible();
-  await expect(entries.getByText("Service Panels erweitert")).toBeVisible();
-  await expect(newsDetail.getByText("Das Portal ist der sichtbare Einstiegspunkt")).toBeVisible();
-
-  const logbookBox = await logbook.boundingBox();
-  const modulesBox = await page.getByRole("heading", { name: "Module" }).boundingBox();
-  expect(logbookBox).not.toBeNull();
-  expect(modulesBox).not.toBeNull();
-  expect(logbookBox!.y).toBeLessThan(modulesBox!.y);
-
-  await logbook.getByLabel("Portal online Details anzeigen").hover();
-  await expect(newsDetail.getByText("Das Portal ist der sichtbare Einstiegspunkt")).toBeVisible();
-
-  await logbook.getByLabel("HUD Interface aktiviert Details anzeigen").hover();
-  await page.waitForTimeout(420);
-  await expect(logbook.getByLabel("HUD Interface aktiviert Details anzeigen")).toHaveAttribute("aria-selected", "true");
-  await expect(newsDetail.getByText("Das Interface wurde von einer klassischen Landing Page")).toBeVisible();
+  await expect(page.getByLabel("Schnick Schnack Navigation")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Übersicht" })).toBeHidden();
+  await expect(page.getByRole("heading", { name: "Verfügbare Dienste" })).toBeVisible();
+  await expect(page.getByText("Globaler Chat")).toBeVisible();
+  await expect(page.locator(".status-dashboard").getByText("Systemstatus")).toBeVisible();
 });
 
-test("brief hover pass does not steal the selected module", async ({ page }) => {
+test("theme toggle switches between dark and light and persists", async ({ page }) => {
   await page.goto("/");
 
-  const voice = page.getByLabel("Voice Details anzeigen");
-  const auth = page.getByLabel("Auth / SSO Details anzeigen");
-  const detail = page.getByLabel("Modul Detail");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  const light = page.getByRole("button", { name: "Theme Light aktivieren" });
+  await expect(light).toBeVisible();
 
-  await voice.click();
-  await expect(detail.getByRole("heading", { name: "Voice" })).toBeVisible();
+  await light.click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(light).toHaveAttribute("aria-pressed", "true");
 
-  await auth.hover();
-  await page.waitForTimeout(120);
-  await page.mouse.move(1000, 760);
+  const storedTheme = await page.evaluate(() => window.localStorage.getItem("schnick-schnack.theme"));
+  expect(storedTheme).toBe("light");
 
-  await expect(detail.getByRole("heading", { name: "Voice" })).toBeVisible();
-  await expect(voice).toHaveAttribute("aria-selected", "true");
-  await expect(auth).toHaveAttribute("aria-selected", "false");
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+});
+
+test("system rows keep public links and receive the active theme", async ({ page }) => {
+  await page.goto("/");
+
+  const voice = page.getByLabel("Voice System");
+  await expect(voice).toBeVisible();
+  await expect(voice.getByRole("link", { name: /Öffnen/i })).toHaveAttribute(
+    "href",
+    /https:\/\/voice\.schnick-schnack\.info\/?\?theme=dark/
+  );
+
+  await page.getByRole("button", { name: "Theme Light aktivieren" }).click();
+  await expect(voice.getByRole("link", { name: /Öffnen/i })).toHaveAttribute(
+    "href",
+    /https:\/\/voice\.schnick-schnack\.info\/?\?theme=light/
+  );
+});
+
+test("global chat and system status remain persistent dashboard areas", async ({ page }) => {
+  await page.goto("/");
+
+  await expect(page.getByText("Globaler Chat")).toBeVisible();
+  await expect(page.getByRole("link", { name: /Im Chat öffnen|Chat-Link nicht verfügbar/ })).toBeVisible();
+  await expect(page.getByText("Willkommen im globalen Chat!")).toHaveCount(0);
+  await expect(page.getByText("Ja! Rollout startet heute Abend.")).toHaveCount(0);
+  await expect(page.getByLabel("Nachricht eingeben")).toHaveCount(0);
+  await expect(page.getByText("99.98%")).toHaveCount(0);
+  await expect(page.getByText("Letzte Aktualisierung:")).toBeVisible();
 });
 
 test("desktop start screen does not require page scrolling", async ({ page }) => {
@@ -157,68 +137,14 @@ test("desktop start screen does not require page scrolling", async ({ page }) =>
   expect(Math.max(overflow.body, overflow.document)).toBeLessThanOrEqual(overflow.viewport + 1);
 });
 
-test("idle autopilot rotates news and module details", async ({ page }) => {
-  await page.goto("/");
+test("design preferences expose only light and dark themes", async ({ page }) => {
+  const designResponse = await page.request.get("/api/design-preferences");
+  expect(designResponse.ok()).toBe(true);
+  const design = await designResponse.json();
 
-  const newsDetail = page.getByLabel("News Detail");
-  const moduleDetail = page.getByLabel("Modul Detail");
-  const initialNews = await newsDetail.getByRole("heading").textContent();
-  const initialModule = await moduleDetail.getByRole("heading").textContent();
-
-  await page.waitForTimeout(7200);
-
-  await expect(newsDetail.getByRole("heading")).not.toHaveText(initialNews ?? "");
-  await expect(moduleDetail.getByRole("heading")).not.toHaveText(initialModule ?? "");
-});
-
-test("theme dock switches themes and persists selection", async ({ page }) => {
-  await page.goto("/");
-
-  const neon = page.getByRole("button", { name: "Theme Neon Ice aktivieren" });
-  await expect(neon).toBeVisible();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "crimson-command");
-
-  await neon.click();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "neon-ice");
-  await expect(neon).toHaveAttribute("aria-pressed", "true");
-
-  const storedTheme = await page.evaluate(() => window.localStorage.getItem("schnick-schnack.theme"));
-  expect(storedTheme).toBe("neon-ice");
-
-  await page.reload();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "neon-ice");
-});
-
-test("language switch toggles English copy and persists selection", async ({ page }) => {
-  await page.goto("/");
-
-  const languageSwitch = page.getByLabel("Sprachauswahl");
-  await expect(languageSwitch).toBeVisible();
-  await expect(page.locator("html")).toHaveAttribute("lang", "de");
-  await expect(page.getByRole("heading", { name: "Was passiert ist" })).toBeVisible();
-
-  await languageSwitch.getByRole("button", { name: "Englisch aktivieren" }).click();
-  await expect(page.locator("html")).toHaveAttribute("lang", "en");
-  await expect(page.getByRole("heading", { name: "What happened" })).toBeVisible();
-  await expect(page.getByLabel("Live updates")).toContainText(/Live via WebSocket|Polling fallback/);
-  await expect(page.getByLabel("News detail")).toContainText("The portal is the public entry point");
-
-  expect(await page.evaluate(() => window.localStorage.getItem("schnick-schnack.language"))).toBe("en");
-
-  await page.reload();
-  await expect(page.locator("html")).toHaveAttribute("lang", "en");
-  await expect(page.getByRole("heading", { name: "What happened" })).toBeVisible();
-});
-
-test("theme dock is vertical on desktop and includes extended themes", async ({ page }) => {
-  await page.goto("/");
-
-  const dock = page.getByLabel("Theme Auswahl");
-  await expect(dock.getByRole("button", { name: "Theme Solar Flare aktivieren" })).toBeVisible();
-  await expect(dock.getByRole("button", { name: "Theme Deep Ocean aktivieren" })).toBeVisible();
-  await expect(dock.getByRole("button", { name: "Theme Ghost Glass aktivieren" })).toBeVisible();
-
-  const dockBox = await dock.boundingBox();
-  expect(dockBox).not.toBeNull();
-  expect(dockBox!.height).toBeGreaterThan(dockBox!.width * 1.5);
+  expect(design.defaults.theme).toBe("dark");
+  expect(design.themes).toEqual(["dark", "light"]);
+  expect(design.layouts).toBeUndefined();
+  expect(design.queryParams).toEqual(["theme"]);
+  expect(design.storage.theme).toBe("schnick-schnack.theme");
 });
