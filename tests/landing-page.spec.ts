@@ -88,7 +88,7 @@ test("live status is presented as a HUD card", async ({ page }) => {
   await expect(liveStatus).toBeVisible();
   await expect(liveStatus).toContainText(/Live per WebSocket|Fallback per Abfrage/);
   await expect(channel).toBeVisible();
-  await expect(channel.getByText("#general")).toBeVisible();
+  await expect(channel.getByText("#landing-feed")).toBeVisible();
 
   const borderRadius = await liveStatus.evaluate((element) => getComputedStyle(element).borderRadius);
   const background = await liveStatus.evaluate((element) => getComputedStyle(element).backgroundImage);
@@ -113,7 +113,7 @@ test("logbook is prominent above modules", async ({ page }) => {
   await expect(entries.getByText("06.05.2026").first()).toBeVisible();
   await expect(entries.getByText("07.05.2026")).toBeVisible();
   await expect(chatDetail).toBeVisible();
-  await expect(chatDetail.getByRole("heading", { name: "#general" })).toBeVisible();
+  await expect(chatDetail.getByRole("heading", { name: "#landing-feed" })).toBeVisible();
   await expect(chatDetail.getByLabel("Slack Channel Vorschau")).toBeVisible();
 
   const logbookBox = await logbook.boundingBox();
@@ -170,7 +170,7 @@ test("slack is an active module and realtime is hidden", async ({ page }) => {
   await expect(detail.getByLabel("Slack Channel Vorschau")).toBeVisible();
   await expect(detail.getByRole("link", { name: /Channel öffnen/i })).toHaveAttribute(
     "href",
-    "https://slack.schnick-schnack.info/channel/general"
+    "https://chat.schnick-schnack.info/channel/landing-feed"
   );
 });
 
@@ -214,7 +214,7 @@ test("chat remains the default top detail when idle", async ({ page }) => {
 
   await page.waitForTimeout(7200);
 
-  await expect(chatDetail.getByRole("heading", { name: "#general" })).toBeVisible();
+  await expect(chatDetail.getByRole("heading", { name: "#landing-feed" })).toBeVisible();
   await expect(moduleDetail.getByRole("heading")).toHaveText(initialModule ?? "");
 });
 

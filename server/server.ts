@@ -117,9 +117,9 @@ const HOST = process.env.HOST ?? "0.0.0.0";
 const PORT = Number.parseInt(process.env.PORT ?? "8080", 10);
 const SERVICE_INFO_PATH = "/.well-known/schnick-schnack/service-info.json";
 const ROCKET_CHAT_URL = process.env.ROCKET_CHAT_URL ?? "https://slack.schnick-schnack.info";
-const ROCKET_CHAT_CHANNEL = process.env.ROCKET_CHAT_CHANNEL ?? "general";
+const ROCKET_CHAT_CHANNEL = process.env.ROCKET_CHAT_CHANNEL ?? "landing-feed";
 const ROCKET_CHAT_CHANNEL_URL =
-  process.env.ROCKET_CHAT_CHANNEL_URL ?? new URL(`/channel/${ROCKET_CHAT_CHANNEL}`, ROCKET_CHAT_URL).toString();
+  process.env.ROCKET_CHAT_CHANNEL_URL ?? `https://chat.schnick-schnack.info/channel/${ROCKET_CHAT_CHANNEL}`;
 const ROCKET_CHAT_MESSAGE_LIMIT = Math.min(
   8,
   Math.max(1, Number.parseInt(process.env.ROCKET_CHAT_MESSAGE_LIMIT ?? "5", 10) || 5)
@@ -338,7 +338,7 @@ async function fetchRocketChatFeed(): Promise<ServiceFeed | null> {
     }
 
     return {
-      id: "rocket-chat-general",
+      id: `rocket-chat-${ROCKET_CHAT_CHANNEL}`,
       title: `#${ROCKET_CHAT_CHANNEL}`,
       href: ROCKET_CHAT_CHANNEL_URL,
       items

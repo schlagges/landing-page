@@ -14,11 +14,11 @@ services:
       HEALTH_SLACK_URL: ${HEALTH_SLACK_URL:-http://127.0.0.1:3010/}
       HEALTH_GITLAB_URL: ${HEALTH_GITLAB_URL:-http://127.0.0.1:8082/}
       INFO_VOICE_URL: ${INFO_VOICE_URL:-http://127.0.0.1:3000/.well-known/schnick-schnack/service-info.json}
-      INFO_SLACK_URL: ${INFO_SLACK_URL:-http://127.0.0.1:3010/.well-known/schnick-schnack/service-info.json}
+      INFO_SLACK_URL: ${INFO_SLACK_URL:-http://127.0.0.1:3021/.well-known/schnick-schnack/service-info.json}
       INFO_GITLAB_URL: ${INFO_GITLAB_URL:-http://127.0.0.1:8082/.well-known/schnick-schnack/service-info.json}
       ROCKET_CHAT_URL: ${ROCKET_CHAT_URL:-http://127.0.0.1:3010/}
-      ROCKET_CHAT_CHANNEL: ${ROCKET_CHAT_CHANNEL:-general}
-      ROCKET_CHAT_CHANNEL_URL: ${ROCKET_CHAT_CHANNEL_URL:-https://slack.schnick-schnack.info/channel/general}
+      ROCKET_CHAT_CHANNEL: ${ROCKET_CHAT_CHANNEL:-landing-feed}
+      ROCKET_CHAT_CHANNEL_URL: ${ROCKET_CHAT_CHANNEL_URL:-https://chat.schnick-schnack.info/channel/landing-feed}
       ROCKET_CHAT_MESSAGE_LIMIT: ${ROCKET_CHAT_MESSAGE_LIMIT:-5}
       ROCKET_CHAT_USER_ID: ${ROCKET_CHAT_USER_ID:-}
       ROCKET_CHAT_AUTH_TOKEN: ${ROCKET_CHAT_AUTH_TOKEN:-}

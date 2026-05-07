@@ -493,9 +493,9 @@ function formatFeedTime(value: string): string {
 }
 
 const fallbackSlackFeed: ServiceFeed = {
-  id: "fallback-general",
-  title: "#general",
-  href: "https://slack.schnick-schnack.info/channel/general",
+  id: "fallback-landing-feed",
+  title: "#landing-feed",
+  href: "https://chat.schnick-schnack.info/channel/landing-feed",
   items: [
     {
       id: "fallback-system",
@@ -529,15 +529,25 @@ function SlackChannelPreview({ feed }: { feed?: ServiceFeed }) {
         </a>
       </div>
       <div className="slack-channel__stream">
-        {activeFeed.items.slice(0, 5).map((item) => (
-          <article key={item.id}>
+        {activeFeed.items.length > 0 ? (
+          activeFeed.items.slice(0, 5).map((item) => (
+            <article key={item.id}>
+              <span>
+                {item.author}
+                <time dateTime={item.createdAt}>{formatFeedTime(item.createdAt)}</time>
+              </span>
+              <p>{item.text}</p>
+            </article>
+          ))
+        ) : (
+          <article>
             <span>
-              {item.author}
-              <time dateTime={item.createdAt}>{formatFeedTime(item.createdAt)}</time>
+              bridge
+              <time dateTime={new Date().toISOString()}>live</time>
             </span>
-            <p>{item.text}</p>
+            <p>Live-Bridge aktiv. Der öffentliche Channel wartet auf die erste freigegebene Nachricht.</p>
           </article>
-        ))}
+        )}
       </div>
     </section>
   );
