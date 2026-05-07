@@ -7,7 +7,8 @@ import {
   RadioTower,
   RefreshCw,
   ShieldCheck,
-  SwatchBook
+  SwatchBook,
+  Languages
 } from "lucide-react";
 import { StrictMode, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -87,12 +88,15 @@ type ServiceInfoSnapshot = {
 };
 
 type SocketState = "connecting" | "live" | "fallback";
+type Language = "de" | "en";
 const HEALTH_REFRESH_MS = 10000;
 const IDLE_ROTATION_MS = 6500;
 const POINTER_IDLE_MS = 4800;
 const HOVER_INTENT_MS = 360;
 const STORAGE_KEY = "schnick-schnack.theme";
+const LANGUAGE_STORAGE_KEY = "schnick-schnack.language";
 const DEFAULT_THEME = "crimson-command";
+const DEFAULT_LANGUAGE: Language = "de";
 const THEMES = [
   { id: "crimson-command", label: "Crimson Command", colors: ["#6ffdf0", "#ff566f"] },
   { id: "neon-ice", label: "Neon Ice", colors: ["#8be1ff", "#e6faff"] },
@@ -105,31 +109,232 @@ const THEMES = [
 ] as const;
 
 type ThemeId = (typeof THEMES)[number]["id"];
+type LocalizedText = Record<Language, string>;
 type ViewTransitionDocument = Document & {
   startViewTransition?: (callback: () => void) => void;
 };
 
-const stateLabels: Record<ServiceState, string> = {
-  checking: "Prüfung",
-  degraded: "Eingeschränkt",
-  offline: "Offline",
-  online: "Online",
-  planned: "Geplant"
+const translations = {
+  de: {
+    aria: {
+      languageSelection: "Sprachauswahl",
+      serviceActions: "Aktionen",
+      serviceDetails: "Details anzeigen",
+      moduleDetail: "Modul Detail",
+      newsDetail: "News Detail",
+      overallStatus: "Gesamtstatus",
+      liveUpdates: "Live Aktualisierung",
+      themeSelection: "Theme Auswahl"
+    },
+    detail: {
+      actions: "Aktionen",
+      emptyInfo:
+        "Service-Info-API wird geprüft. Dienste können den öffentlichen Info-Endpunkt später implementieren.",
+      intro:
+        "Dieses Panel ist für Live-Details und Service-Actions vorbereitet, sobald der Dienst seine öffentlichen Metadaten per API bereitstellt. Sichtbar bleiben nur freigegebene Statusdaten; Betriebsdetails und interne Routen bleiben serverseitig.",
+      label: "Service Detail",
+      metrics: "Service Kennzahlen",
+      notAvailable: "Noch nicht verfügbar",
+      open: "Öffnen",
+      response: "Antwort",
+      status: "Status",
+      update: "Update"
+    },
+    hero: {
+      eyebrow: "COMMAND DISPLAY / PUBLIC SERVICES",
+      text: "Systemzugriff auf verfügbare Dienste. Live-Status aktiv, öffentliche Telemetrie reduziert auf Verfügbarkeit."
+    },
+    language: {
+      label: "Sprache",
+      options: {
+        de: "Deutsch",
+        en: "English"
+      },
+      switchTo: {
+        de: "Deutsch aktivieren",
+        en: "Englisch aktivieren"
+      }
+    },
+    live: {
+      fallback: "Fallback per Abfrage",
+      lastUpdate: "Letzte Aktualisierung",
+      live: "Live per WebSocket"
+    },
+    logbook: {
+      autopilot: "Autopilot rotiert bei Inaktivität",
+      eyebrow: "Mission Log",
+      title: "Was passiert ist"
+    },
+    refresh: {
+      aria: (seconds: number) => `Nächster Refresh in ${seconds} Sekunden`
+    },
+    services: {
+      onlineCount: (online: number, total: number) => `${online} von ${total} Diensten online`,
+      subtitle: "Schnelle Einstiege, klickbereit während jeder Animation.",
+      title: "Module"
+    },
+    status: {
+      info: {
+        available: "API aktiv",
+        checking: "API-Prüfung",
+        error: "API Fehler",
+        planned: "Geplant",
+        unsupported: "API offen"
+      },
+      overall: {
+        checking: "Status wird geprüft",
+        degraded: "Teilweise verfügbar",
+        offline: "Störung erkannt",
+        online: "Alle öffentlichen Dienste erreichbar"
+      },
+      service: {
+        checking: "Prüfung",
+        degraded: "Eingeschränkt",
+        offline: "Offline",
+        online: "Online",
+        planned: "Geplant"
+      }
+    },
+    theme: {
+      activate: (label: string) => `Theme ${label} aktivieren`,
+      label: "Theme"
+    },
+    time: {
+      unchecked: "Noch nicht geprüft"
+    }
+  },
+  en: {
+    aria: {
+      languageSelection: "Language selection",
+      serviceActions: "Actions",
+      serviceDetails: "show details",
+      moduleDetail: "Module detail",
+      newsDetail: "News detail",
+      overallStatus: "Overall status",
+      liveUpdates: "Live updates",
+      themeSelection: "Theme selection"
+    },
+    detail: {
+      actions: "Actions",
+      emptyInfo:
+        "Service Info API is being checked. Services can implement the public info endpoint later.",
+      intro:
+        "This panel is prepared for live details and service actions once the service exposes public metadata through its API. Only approved status data stays visible; operational details and internal routes remain server-side.",
+      label: "Service Detail",
+      metrics: "Service metrics",
+      notAvailable: "Not available yet",
+      open: "Open",
+      response: "Response",
+      status: "Status",
+      update: "Update"
+    },
+    hero: {
+      eyebrow: "COMMAND DISPLAY / PUBLIC SERVICES",
+      text: "System access to available services. Live status is active, public telemetry is reduced to availability."
+    },
+    language: {
+      label: "Language",
+      options: {
+        de: "Deutsch",
+        en: "English"
+      },
+      switchTo: {
+        de: "Switch to German",
+        en: "Switch to English"
+      }
+    },
+    live: {
+      fallback: "Polling fallback",
+      lastUpdate: "Last update",
+      live: "Live via WebSocket"
+    },
+    logbook: {
+      autopilot: "Autopilot rotates while idle",
+      eyebrow: "Mission Log",
+      title: "What happened"
+    },
+    refresh: {
+      aria: (seconds: number) => `Next refresh in ${seconds} seconds`
+    },
+    services: {
+      onlineCount: (online: number, total: number) => `${online} of ${total} services online`,
+      subtitle: "Fast entry points, clickable through every animation.",
+      title: "Modules"
+    },
+    status: {
+      info: {
+        available: "API active",
+        checking: "API check",
+        error: "API error",
+        planned: "Planned",
+        unsupported: "API open"
+      },
+      overall: {
+        checking: "Checking status",
+        degraded: "Partially available",
+        offline: "Incident detected",
+        online: "All public services reachable"
+      },
+      service: {
+        checking: "Checking",
+        degraded: "Degraded",
+        offline: "Offline",
+        online: "Online",
+        planned: "Planned"
+      }
+    },
+    theme: {
+      activate: (label: string) => `Activate ${label} theme`,
+      label: "Theme"
+    },
+    time: {
+      unchecked: "Not checked yet"
+    }
+  }
+} as const;
+
+type Translation = (typeof translations)[Language];
+
+const serviceCopy: Record<string, LocalizedText> = {
+  auth: {
+    de: "Zentrale Anmeldung für Dienste mit Single Sign-on.",
+    en: "Central sign-in for services with single sign-on."
+  },
+  gitlab: {
+    de: "Code- und Projektplattform für die schnick-schnack-Projekte.",
+    en: "Code and project platform for schnick-schnack projects."
+  },
+  realtime: {
+    de: "Live-Kommunikation für Sprach- und Medienverbindungen.",
+    en: "Live communication for voice and media connections."
+  },
+  voice: {
+    de: "Geschützter Zugang zur OpenVoice-Oberfläche.",
+    en: "Protected access to the OpenVoice interface."
+  }
 };
 
-const overallLabels: Record<HealthSnapshot["overall"], string> = {
-  checking: "Status wird geprüft",
-  degraded: "Teilweise verfügbar",
-  offline: "Störung erkannt",
-  online: "Alle öffentlichen Dienste erreichbar"
-};
-
-const infoStateLabels: Record<ServiceInfoState, string> = {
-  available: "API aktiv",
-  checking: "API-Prüfung",
-  error: "API Fehler",
-  planned: "Geplant",
-  unsupported: "API offen"
+const serviceMessages: Record<string, LocalizedText> = {
+  "Dienst antwortet.": {
+    de: "Dienst antwortet.",
+    en: "Service is responding."
+  },
+  "Dienst antwortet unerwartet.": {
+    de: "Dienst antwortet unerwartet.",
+    en: "Service responded unexpectedly."
+  },
+  "Dienst ist aktuell nicht erreichbar.": {
+    de: "Dienst ist aktuell nicht erreichbar.",
+    en: "Service is currently unreachable."
+  },
+  "Geplant.": {
+    de: "Geplant.",
+    en: "Planned."
+  },
+  "Status wird geprüft.": {
+    de: "Status wird geprüft.",
+    en: "Checking status."
+  }
 };
 
 const iconMap = {
@@ -145,6 +350,10 @@ function prefersReducedMotion(): boolean {
 
 function normalizeTheme(theme: string | null | undefined): ThemeId {
   return THEMES.some((item) => item.id === theme) ? (theme as ThemeId) : DEFAULT_THEME;
+}
+
+function normalizeLanguage(language: string | null | undefined): Language {
+  return language === "en" || language === "de" ? language : DEFAULT_LANGUAGE;
 }
 
 function isStorageAvailable(): boolean {
@@ -171,6 +380,21 @@ function applyInitialTheme(): ThemeId {
   const initialTheme = normalizeTheme(savedTheme);
   applyTheme(initialTheme, false);
   return initialTheme;
+}
+
+function applyLanguage(language: Language, shouldSave = true) {
+  document.documentElement.lang = language;
+
+  if (shouldSave && isStorageAvailable()) {
+    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+  }
+}
+
+function applyInitialLanguage(): Language {
+  const savedLanguage = isStorageAvailable() ? window.localStorage.getItem(LANGUAGE_STORAGE_KEY) : null;
+  const initialLanguage = normalizeLanguage(savedLanguage);
+  applyLanguage(initialLanguage, false);
+  return initialLanguage;
 }
 
 const wordPermutations = [
@@ -206,6 +430,73 @@ const logbookEntries = [
   }
 ];
 
+const logbookTranslations: Record<string, { title: LocalizedText; meta: LocalizedText; teaser: LocalizedText; body: LocalizedText }> = {
+  "hud-interface": {
+    title: {
+      de: "HUD Interface aktiviert",
+      en: "HUD Interface activated"
+    },
+    meta: {
+      de: "Log 002 / Display System",
+      en: "Log 002 / Display System"
+    },
+    teaser: {
+      de: "Das Display wurde vom Portal zur Brückenkonsole mit animiertem HUD erweitert.",
+      en: "The display evolved from a portal into a bridge console with an animated HUD."
+    },
+    body: {
+      de: logbookEntries[1]!.body,
+      en: "The interface moved from a classic landing page to a command display. It keeps a dark, technical tone while using red energy accents, cyan edges, and a fine grid to feel like an active control surface. Motion is short, transform-based, and disabled for reduced-motion users. The result is more expressive than a business dashboard while staying readable: visitors can quickly see what is available and open the right service."
+    }
+  },
+  "portal-online": {
+    title: {
+      de: "Portal online",
+      en: "Portal online"
+    },
+    meta: {
+      de: "Log 001 / Public Gateway",
+      en: "Log 001 / Public Gateway"
+    },
+    teaser: {
+      de: "Das öffentliche Gateway bündelt Voice, Auth und Realtime in einer Statusfläche.",
+      en: "The public gateway brings Voice, Auth, and Realtime into one status surface."
+    },
+    body: {
+      de: logbookEntries[0]!.body,
+      en: "The portal is the public entry point for services on schnick-schnack.info. Its core boundary is deliberate: visitors see service names, status, update times, and actions, but not private containers, ports, database addresses, or routing. Health data is reduced server-side before it reaches the browser, keeping the page useful for orientation without exposing operational internals."
+    }
+  },
+  "service-panels": {
+    title: {
+      de: "Service Panels erweitert",
+      en: "Service panels expanded"
+    },
+    meta: {
+      de: "Log 003 / Interaction Layer",
+      en: "Log 003 / Interaction Layer"
+    },
+    teaser: {
+      de: "Kacheln wurden zu Detailpanels mit vorbereiteter Action-Schicht und Refresh-Takt.",
+      en: "Tiles became detail panels with a prepared action layer and refresh cadence."
+    },
+    body: {
+      de: logbookEntries[2]!.body,
+      en: "The cards now follow a shared interaction model: the front shows compact context, while the detail view contains status, measurements, and actions. The grid stays stable and the centered HUD panel can hold longer content without moving the whole page. The reverse refresh indicator shows how long the current health snapshot remains fresh."
+    }
+  }
+};
+
+function getLogEntry(entry: (typeof logbookEntries)[number], language: Language) {
+  const localized = logbookTranslations[entry.id];
+  return {
+    body: localized?.body[language] ?? entry.body,
+    meta: localized?.meta[language] ?? entry.meta,
+    teaser: localized?.teaser[language] ?? entry.teaser,
+    title: localized?.title[language] ?? entry.title
+  };
+}
+
 function shuffleSegments(): string[] {
   const next = wordPermutations[Math.floor(Math.random() * wordPermutations.length)] ?? wordPermutations[0];
   return [...next];
@@ -218,12 +509,12 @@ function nextSegments(current: string[]): string[] {
   return [...next];
 }
 
-function formatTime(value: string | null): string {
+function formatTime(value: string | null, language: Language): string {
   if (!value) {
-    return "Noch nicht geprüft";
+    return translations[language].time.unchecked;
   }
 
-  return new Intl.DateTimeFormat("de-DE", {
+  return new Intl.DateTimeFormat(language === "de" ? "de-DE" : "en-US", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit"
@@ -333,8 +624,8 @@ function useServiceInfo(): ServiceInfoSnapshot | null {
   return snapshot;
 }
 
-function StatusPill({ state }: { state: ServiceState }) {
-  return <span className={`status-pill status-${state}`}>{stateLabels[state]}</span>;
+function StatusPill({ state, t }: { state: ServiceState; t: Translation }) {
+  return <span className={`status-pill status-${state}`}>{t.status.service[state]}</span>;
 }
 
 function useHoverIntent(onIntent: () => void) {
@@ -360,7 +651,7 @@ function useHoverIntent(onIntent: () => void) {
   return { clearIntent, scheduleIntent };
 }
 
-function RefreshCountdown({ generatedAt }: { generatedAt: string | null }) {
+function RefreshCountdown({ generatedAt, t }: { generatedAt: string | null; t: Translation }) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -374,7 +665,7 @@ function RefreshCountdown({ generatedAt }: { generatedAt: string | null }) {
   const seconds = Math.ceil(remaining / 1000);
 
   return (
-    <div className="refresh-countdown" aria-label={`Nächster Refresh in ${seconds} Sekunden`}>
+    <div className="refresh-countdown" aria-label={t.refresh.aria(seconds)}>
       <span
         className="refresh-countdown__dial"
         style={{ "--refresh-progress": progress } as React.CSSProperties}
@@ -385,9 +676,9 @@ function RefreshCountdown({ generatedAt }: { generatedAt: string | null }) {
   );
 }
 
-function ServiceInfoMetrics({ metrics }: { metrics: ServiceMetric[] }) {
+function ServiceInfoMetrics({ metrics, t }: { metrics: ServiceMetric[]; t: Translation }) {
   return (
-    <div className="service-info-metrics" aria-label="Service Kennzahlen">
+    <div className="service-info-metrics" aria-label={t.detail.metrics}>
       {metrics.map((metric) => (
         <div className={`service-info-metric service-info-metric--${metric.tone ?? "neutral"}`} key={metric.id}>
           <span>{metric.label}</span>
@@ -428,16 +719,22 @@ function ServiceCard({
   service,
   generatedAt,
   isActive,
-  onOpen
+  onOpen,
+  language,
+  t
 }: {
   service: PublicService;
   generatedAt: string | null;
   isActive: boolean;
   onOpen: () => void;
+  language: Language;
+  t: Translation;
 }) {
   const Icon = iconMap[service.icon];
   const cardClassName = `service-card${isActive ? " service-card--active" : ""}`;
   const { clearIntent, scheduleIntent } = useHoverIntent(onOpen);
+  const description = serviceCopy[service.id]?.[language] ?? service.description;
+  const message = serviceMessages[service.message]?.[language] ?? service.message;
 
   return (
     <article
@@ -449,7 +746,7 @@ function ServiceCard({
       onMouseLeave={clearIntent}
       onFocus={onOpen}
       tabIndex={0}
-      aria-label={`${service.name} Details anzeigen`}
+      aria-label={`${service.name} ${t.aria.serviceDetails}`}
     >
       <div className="service-card__shell">
         <span className="selected-badge">FOCUS</span>
@@ -458,20 +755,20 @@ function ServiceCard({
             <div className="service-icon" aria-hidden="true">
               <Icon size={24} strokeWidth={2} />
             </div>
-            <StatusPill state={service.state} />
+            <StatusPill state={service.state} t={t} />
           </div>
           <div>
             <h3>{service.name}</h3>
-            <p>{service.description}</p>
+            <p>{description}</p>
           </div>
           <div className="service-card__meta">
             <span>
               <Clock3 size={15} aria-hidden="true" />
-              {formatTime(service.updatedAt)}
+              {formatTime(service.updatedAt, language)}
             </span>
-            {service.responseMs !== null ? <span>{service.responseMs} ms</span> : <span>{service.message}</span>}
+            {service.responseMs !== null ? <span>{service.responseMs} ms</span> : <span>{message}</span>}
           </div>
-          <RefreshCountdown generatedAt={generatedAt} />
+          <RefreshCountdown generatedAt={generatedAt} t={t} />
         </div>
       </div>
     </article>
@@ -512,10 +809,14 @@ function Wordmark() {
 
 function Logbook({
   activeLogId,
-  onOpen
+  onOpen,
+  language,
+  t
 }: {
   activeLogId: string;
   onOpen: (id: string) => void;
+  language: Language;
+  t: Translation;
 }) {
   const activeEntry = (logbookEntries.find((entry) => entry.id === activeLogId) ?? logbookEntries[0])!;
 
@@ -523,10 +824,10 @@ function Logbook({
     <section className="logbook" aria-labelledby="logbook-title">
       <div className="panel-heading">
         <div>
-          <span>Mission Log</span>
-          <h2 id="logbook-title">Was passiert ist</h2>
+          <span>{t.logbook.eyebrow}</span>
+          <h2 id="logbook-title">{t.logbook.title}</h2>
         </div>
-        <small>Autopilot rotiert bei Inaktivität</small>
+        <small>{t.logbook.autopilot}</small>
       </div>
       <div className="logbook__layout">
         <div className="logbook__entries" data-card-group>
@@ -535,11 +836,13 @@ function Logbook({
               entry={entry}
               isActive={activeLogId === entry.id}
               key={entry.id}
+              language={language}
               onOpen={() => onOpen(entry.id)}
+              t={t}
             />
           ))}
         </div>
-        <LogDetail entry={activeEntry} />
+        <LogDetail entry={activeEntry} language={language} t={t} />
       </div>
     </section>
   );
@@ -548,13 +851,18 @@ function Logbook({
 function LogCard({
   entry,
   isActive,
-  onOpen
+  onOpen,
+  language,
+  t
 }: {
   entry: (typeof logbookEntries)[number];
   isActive: boolean;
   onOpen: () => void;
+  language: Language;
+  t: Translation;
 }) {
   const { clearIntent, scheduleIntent } = useHoverIntent(onOpen);
+  const localizedEntry = getLogEntry(entry, language);
 
   return (
     <article
@@ -562,33 +870,35 @@ function LogCard({
       data-selectable-card
       aria-selected={isActive}
       tabIndex={0}
-      aria-label={`${entry.title} Details anzeigen`}
+      aria-label={`${localizedEntry.title} ${t.aria.serviceDetails}`}
       onMouseEnter={scheduleIntent}
       onMouseLeave={clearIntent}
       onFocus={onOpen}
       onClick={onOpen}
     >
       <span className="selected-badge">FOCUS</span>
-      <span>{entry.meta}</span>
-      <h3>{entry.title}</h3>
-      <p>{entry.teaser}</p>
+      <span>{localizedEntry.meta}</span>
+      <h3>{localizedEntry.title}</h3>
+      <p>{localizedEntry.teaser}</p>
     </article>
   );
 }
 
-function LogDetail({ entry }: { entry: (typeof logbookEntries)[number] }) {
+function LogDetail({ entry, language, t }: { entry: (typeof logbookEntries)[number]; language: Language; t: Translation }) {
+  const localizedEntry = getLogEntry(entry, language);
+
   return (
-    <article className="detail-panel detail-panel--news" aria-label="News Detail" data-active-detail key={entry.id}>
+    <article className="detail-panel detail-panel--news" aria-label={t.aria.newsDetail} data-active-detail key={entry.id}>
       <div className="detail-header">
         <div className="service-icon service-icon--detail" aria-hidden="true">
           <Activity size={24} strokeWidth={2} />
         </div>
         <div>
-          <span>{entry.meta}</span>
-          <h3 data-active-title>{entry.title}</h3>
+          <span>{localizedEntry.meta}</span>
+          <h3 data-active-title>{localizedEntry.title}</h3>
         </div>
       </div>
-      <p className="detail-copy detail-copy--long" data-active-description>{entry.body}</p>
+      <p className="detail-copy detail-copy--long" data-active-description>{localizedEntry.body}</p>
     </article>
   );
 }
@@ -596,11 +906,15 @@ function LogDetail({ entry }: { entry: (typeof logbookEntries)[number] }) {
 function ServiceDetail({
   service,
   generatedAt,
-  serviceInfo
+  serviceInfo,
+  language,
+  t
 }: {
   service: PublicService | undefined;
   generatedAt: string | null;
   serviceInfo: ServiceInfoResult | undefined;
+  language: Language;
+  t: Translation;
 }) {
   if (!service) {
     return null;
@@ -610,40 +924,40 @@ function ServiceDetail({
   const infoStatus = serviceInfo?.status ?? service.infoState;
   const infoData = serviceInfo?.data ?? null;
   const serviceActions = infoData?.actions?.length ? infoData.actions : null;
+  const description = serviceCopy[service.id]?.[language] ?? service.description;
+  const message = serviceMessages[service.message]?.[language] ?? service.message;
 
   return (
-    <article className="detail-panel detail-panel--service" aria-label="Modul Detail" data-active-detail key={service.id}>
+    <article className="detail-panel detail-panel--service" aria-label={t.aria.moduleDetail} data-active-detail key={service.id}>
       <div className="detail-header">
         <div className="service-icon service-icon--detail" aria-hidden="true">
           <Icon size={24} strokeWidth={2} />
         </div>
         <div>
-          <span>Service Detail</span>
+          <span>{t.detail.label}</span>
           <h3 data-active-title>{service.name}</h3>
         </div>
       </div>
       <p className="detail-copy" data-active-description>
-        {infoData?.summary ?? service.description} Dieses Panel ist für Live-Details und Service-Actions vorbereitet,
-        sobald der Dienst seine öffentlichen Metadaten per API bereitstellt. Sichtbar bleiben nur
-        freigegebene Statusdaten; Betriebsdetails und interne Routen bleiben serverseitig.
+        {infoData?.summary ?? description} {t.detail.intro}
       </p>
       <div className="detail-metrics">
-        <span>Status: {stateLabels[service.state]}</span>
-        <span>Update: {formatTime(service.updatedAt)}</span>
-        <span>{service.responseMs !== null ? `Antwort: ${service.responseMs} ms` : service.message}</span>
-        <span>{infoStateLabels[infoStatus]}</span>
+        <span>{t.detail.status}: {t.status.service[service.state]}</span>
+        <span>{t.detail.update}: {formatTime(service.updatedAt, language)}</span>
+        <span>{service.responseMs !== null ? `${t.detail.response}: ${service.responseMs} ms` : message}</span>
+        <span>{t.status.info[infoStatus]}</span>
       </div>
       <div className="service-info-zone">
-        {infoData?.metrics?.length ? <ServiceInfoMetrics metrics={infoData.metrics} /> : null}
+        {infoData?.metrics?.length ? <ServiceInfoMetrics metrics={infoData.metrics} t={t} /> : null}
         {infoData?.charts?.[0] ? <ServiceInfoChart chart={infoData.charts[0]} /> : null}
         {!infoData ? (
           <p className="service-info-empty">
-            {serviceInfo?.message ?? "Service-Info-API wird geprüft. Dienste können den öffentlichen Info-Endpunkt später implementieren."}
+            {serviceInfo?.message ?? t.detail.emptyInfo}
           </p>
         ) : null}
       </div>
-      <RefreshCountdown generatedAt={generatedAt} />
-      <div className="service-actions" aria-label={`${service.name} Aktionen`}>
+      <RefreshCountdown generatedAt={generatedAt} t={t} />
+      <div className="service-actions" aria-label={`${service.name} ${t.aria.serviceActions}`}>
         {serviceActions ? (
           serviceActions.map((action) => (
             <a className="service-card__link" href={action.href} key={action.id}>
@@ -653,11 +967,11 @@ function ServiceDetail({
           ))
         ) : service.href ? (
           <a className="service-card__link" href={service.href}>
-            Öffnen
+            {t.detail.open}
             <ArrowUpRight size={17} aria-hidden="true" />
           </a>
         ) : (
-          <span className="service-card__disabled">Noch nicht verfügbar</span>
+          <span className="service-card__disabled">{t.detail.notAvailable}</span>
         )}
       </div>
     </article>
@@ -666,21 +980,23 @@ function ServiceDetail({
 
 function ThemeDock({
   activeTheme,
-  onThemeChange
+  onThemeChange,
+  t
 }: {
   activeTheme: ThemeId;
   onThemeChange: (theme: ThemeId) => void;
+  t: Translation;
 }) {
   return (
-    <aside className="theme-dock" aria-label="Theme Auswahl">
+    <aside className="theme-dock" aria-label={t.aria.themeSelection}>
       <div className="theme-dock__label">
         <SwatchBook size={15} aria-hidden="true" />
-        <span>Theme</span>
+        <span>{t.theme.label}</span>
       </div>
       <div className="theme-dock__chips">
         {THEMES.map((theme) => (
           <button
-            aria-label={`Theme ${theme.label} aktivieren`}
+            aria-label={t.theme.activate(theme.label)}
             aria-pressed={activeTheme === theme.id}
             className={`theme-chip${activeTheme === theme.id ? " is-active" : ""}`}
             data-theme-choice={theme.id}
@@ -706,10 +1022,44 @@ function ThemeDock({
   );
 }
 
+function LanguageSwitch({
+  language,
+  onLanguageChange,
+  t
+}: {
+  language: Language;
+  onLanguageChange: (language: Language) => void;
+  t: Translation;
+}) {
+  return (
+    <div className="language-switch" aria-label={t.aria.languageSelection}>
+      <span>
+        <Languages size={15} aria-hidden="true" />
+        {t.language.label}
+      </span>
+      <div>
+        {(["de", "en"] as const).map((option) => (
+          <button
+            aria-label={t.language.switchTo[option]}
+            aria-pressed={language === option}
+            className={language === option ? "is-active" : ""}
+            key={option}
+            onClick={() => onLanguageChange(option)}
+            type="button"
+          >
+            {option.toUpperCase()}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const { snapshot, socketState } = useHealth();
   const serviceInfoSnapshot = useServiceInfo();
   const [activeTheme, setActiveTheme] = useState<ThemeId>(() => applyInitialTheme());
+  const [language, setLanguage] = useState<Language>(() => applyInitialLanguage());
   const [activeLogId, setActiveLogId] = useState(logbookEntries[0]!.id);
   const [activeServiceId, setActiveServiceId] = useState<string | null>(null);
   const lastPointerAt = useRef(Date.now());
@@ -717,6 +1067,7 @@ function App() {
   const activeServices = services.filter((service) => service.state !== "planned");
   const plannedServices = services.filter((service) => service.state === "planned");
   const visibleServices = [...activeServices, ...plannedServices];
+  const t = translations[language];
 
   const onlineCount = useMemo(
     () => activeServices.filter((service) => service.state === "online").length,
@@ -741,6 +1092,11 @@ function App() {
     }
 
     update();
+  }
+
+  function changeLanguage(nextLanguage: Language) {
+    setLanguage(nextLanguage);
+    applyLanguage(nextLanguage);
   }
 
   useEffect(() => {
@@ -812,42 +1168,44 @@ function App() {
         <div className="hero__content">
           <div className="eyebrow">
             <Activity size={16} aria-hidden="true" />
-            COMMAND DISPLAY / PUBLIC SERVICES
+            {t.hero.eyebrow}
           </div>
           <p className="domain-label" id="page-title">schnick-schnack.info</p>
           <Wordmark />
-          <p>
-            Systemzugriff auf verfügbare Dienste. Live-Status aktiv, öffentliche Telemetrie
-            reduziert auf Verfügbarkeit.
-          </p>
+          <p>{t.hero.text}</p>
         </div>
-        <aside className="status-panel" aria-label="Gesamtstatus">
-          <span className={`status-dot status-dot--${snapshot?.overall ?? "checking"}`} />
-          <div>
-            <strong>{snapshot ? overallLabels[snapshot.overall] : "Status wird geladen"}</strong>
-            <span>{onlineCount} von {activeServices.length || 3} Diensten online</span>
-          </div>
-        </aside>
+        <div className="hero__controls">
+          <aside className="status-panel" aria-label={t.aria.overallStatus}>
+            <span className={`status-dot status-dot--${snapshot?.overall ?? "checking"}`} />
+            <div>
+              <strong>{snapshot ? t.status.overall[snapshot.overall] : t.status.overall.checking}</strong>
+              <span>{t.services.onlineCount(onlineCount, activeServices.length || 3)}</span>
+            </div>
+          </aside>
+          <LanguageSwitch language={language} onLanguageChange={changeLanguage} t={t} />
+        </div>
       </section>
 
-      <section className="live-strip" aria-label="Live Aktualisierung">
+      <section className="live-strip" aria-label={t.aria.liveUpdates}>
         <div>
           <RefreshCw size={17} aria-hidden="true" className={socketState === "live" ? "spin-soft" : ""} />
-          <span>{socketState === "live" ? "Live per WebSocket" : "Fallback per Abfrage"}</span>
+          <span>{socketState === "live" ? t.live.live : t.live.fallback}</span>
         </div>
-        <span>Letzte Aktualisierung: {formatTime(snapshot?.generatedAt ?? null)}</span>
+        <span>{t.live.lastUpdate}: {formatTime(snapshot?.generatedAt ?? null, language)}</span>
       </section>
 
       <Logbook
         activeLogId={activeLogId}
+        language={language}
         onOpen={setActiveLogId}
+        t={t}
       />
 
       <section className="section-block" aria-labelledby="services-title">
         <div className="panel-heading">
           <div>
-            <h2 id="services-title">Module</h2>
-            <p>Schnelle Einstiege, klickbereit während jeder Animation.</p>
+            <h2 id="services-title">{t.services.title}</h2>
+            <p>{t.services.subtitle}</p>
           </div>
         </div>
 
@@ -860,7 +1218,9 @@ function App() {
                   service={service}
                   generatedAt={snapshot?.generatedAt ?? null}
                   isActive={activeService?.id === service.id}
+                  language={language}
                   onOpen={() => setActiveServiceId(service.id)}
+                  t={t}
                 />
               ))
             ) : (
@@ -875,11 +1235,13 @@ function App() {
           <ServiceDetail
             service={activeService}
             generatedAt={snapshot?.generatedAt ?? null}
+            language={language}
             serviceInfo={activeService ? serviceInfoById.get(activeService.id) : undefined}
+            t={t}
           />
         </div>
       </section>
-      <ThemeDock activeTheme={activeTheme} onThemeChange={changeTheme} />
+      <ThemeDock activeTheme={activeTheme} onThemeChange={changeTheme} t={t} />
     </main>
   );
 }

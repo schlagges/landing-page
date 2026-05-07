@@ -189,6 +189,27 @@ test("theme dock switches themes and persists selection", async ({ page }) => {
   await expect(page.locator("html")).toHaveAttribute("data-theme", "neon-ice");
 });
 
+test("language switch toggles English copy and persists selection", async ({ page }) => {
+  await page.goto("/");
+
+  const languageSwitch = page.getByLabel("Sprachauswahl");
+  await expect(languageSwitch).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "de");
+  await expect(page.getByRole("heading", { name: "Was passiert ist" })).toBeVisible();
+
+  await languageSwitch.getByRole("button", { name: "Englisch aktivieren" }).click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.getByRole("heading", { name: "What happened" })).toBeVisible();
+  await expect(page.getByLabel("Live updates")).toContainText(/Live via WebSocket|Polling fallback/);
+  await expect(page.getByLabel("News detail")).toContainText("The portal is the public entry point");
+
+  expect(await page.evaluate(() => window.localStorage.getItem("schnick-schnack.language"))).toBe("en");
+
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.getByRole("heading", { name: "What happened" })).toBeVisible();
+});
+
 test("theme dock is vertical on desktop and includes extended themes", async ({ page }) => {
   await page.goto("/");
 
