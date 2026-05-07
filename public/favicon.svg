@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Schnick Schnack">
+  <defs>
+    <radialGradient id="ambient" cx="50%" cy="42%" r="66%">
+      <stop offset="0" stop-color="#2af8e6" stop-opacity=".96"/>
+      <stop offset=".38" stop-color="#102a32" stop-opacity=".92"/>
+      <stop offset="1" stop-color="#020507"/>
+    </radialGradient>
+    <linearGradient id="ring" x1="62" x2="450" y1="78" y2="434">
+      <stop offset="0" stop-color="#ff4f6d"/>
+      <stop offset=".52" stop-color="#64fff0"/>
+      <stop offset="1" stop-color="#ff273f"/>
+    </linearGradient>
+    <filter id="glow" x="-35%" y="-35%" width="170%" height="170%">
+      <feGaussianBlur stdDeviation="10" result="blur"/>
+      <feColorMatrix in="blur" values="0 0 0 0 0.38 0 0 0 0 1 0 0 0 0 0.94 0 0 0 .72 0"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#030607"/>
+  <rect x="28" y="28" width="456" height="456" rx="92" fill="url(#ambient)" stroke="url(#ring)" stroke-width="14"/>
+  <path d="M92 168V92h76M420 344v76h-76" fill="none" stroke="#ff5370" stroke-width="22" stroke-linecap="round"/>
+  <path d="M344 92h76v76M168 420H92v-76" fill="none" stroke="#68fff0" stroke-width="14" stroke-linecap="round" opacity=".92"/>
+  <g filter="url(#glow)">
+    <path d="M158 294c48-94 97-94 146 0 16 29 48 30 62 2 22-44-37-92-82-51-36 33-64 36-100 0-44-43-104 6-82 51 14 28 42 27 56-2Z" fill="none" stroke="#eafcff" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="174" cy="218" r="20" fill="#ff5370"/>
+    <circle cx="338" cy="218" r="20" fill="#68fff0"/>
+  </g>
+  <path d="M126 350h260" stroke="#68fff0" stroke-width="10" stroke-linecap="round" opacity=".68"/>
+  <path d="M154 378h204" stroke="#ff5370" stroke-width="8" stroke-linecap="round" opacity=".56"/>
+</svg>

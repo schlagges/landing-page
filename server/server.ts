@@ -779,6 +779,12 @@ app.get("/api/docs", (_request, response) => {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#ff5370" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#ff5370" />
     <title>Schnick Schnack Service Info API</title>
     <style>
       body { margin: 0; padding: 32px; color: #edf7f8; background: #05070c; font-family: ui-sans-serif, system-ui, sans-serif; }
