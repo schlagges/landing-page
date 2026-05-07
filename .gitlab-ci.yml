@@ -27,6 +27,32 @@ ui_review_landing_page:
   extends: .node_job
   image: mcr.microsoft.com/playwright:v1.59.1-noble
   stage: test
+  rules:
+    - if: '$RUN_UI_REVIEW == "1"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - src/**/*
+        - public/**/*
+        - index.html
+        - vite.config.*
+        - package.json
+        - package-lock.json
+        - scripts/ui-review-project.mjs
+        - tests/ui-review/**/*
+        - docs/ui-review/**/*
+        - .gitlab-ci.yml
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+      changes:
+        - src/**/*
+        - public/**/*
+        - index.html
+        - vite.config.*
+        - package.json
+        - package-lock.json
+        - scripts/ui-review-project.mjs
+        - tests/ui-review/**/*
+        - docs/ui-review/**/*
+        - .gitlab-ci.yml
   script:
     - npm run ui-review
   artifacts:
