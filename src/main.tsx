@@ -104,8 +104,6 @@ type ServiceInfoSnapshot = {
 
 type SocketState = "connecting" | "live" | "fallback";
 const HEALTH_REFRESH_MS = 10000;
-const IDLE_ROTATION_MS = 6500;
-const POINTER_IDLE_MS = 4800;
 const HOVER_INTENT_MS = 360;
 const STORAGE_KEY = "schnick-schnack.theme";
 const DEFAULT_THEME = "crimson-command";
@@ -663,12 +661,16 @@ function Wordmark() {
 
 function Logbook({
   activeLogId,
-  onOpen
+  onClear,
+  onOpen,
+  slackFeed
 }: {
-  activeLogId: string;
+  activeLogId: string | null;
+  onClear: () => void;
   onOpen: (id: string) => void;
+  slackFeed?: ServiceFeed;
 }) {
-  const activeEntry = (logbookEntries.find((entry) => entry.id === activeLogId) ?? logbookEntries[0])!;
+  const activeEntry = activeLogId ? logbookEntries.find((entry) => entry.id === activeLogId) : undefined;
 
   return (
     <section className="logbook" aria-labelledby="logbook-title">
@@ -677,7 +679,7 @@ function Logbook({
           <span>Mission Log</span>
           <h2 id="logbook-title">Was passiert ist</h2>
         </div>
-        <small>Autopilot rotiert bei Inaktivität</small>
+        <small>Chat bleibt Standard, News öffnen bei Fokus</small>
       </div>
       <div className="logbook__layout">
         <div className="logbook__entries" data-card-group>
@@ -686,11 +688,12 @@ function Logbook({
               entry={entry}
               isActive={activeLogId === entry.id}
               key={entry.id}
+              onClear={onClear}
               onOpen={() => onOpen(entry.id)}
             />
           ))}
         </div>
-        <LogDetail entry={activeEntry} />
+        {activeEntry ? <LogDetail entry={activeEntry} /> : <ChatDetail feed={slackFeed} />}
       </div>
     </section>
   );
@@ -699,13 +702,19 @@ function Logbook({
 function LogCard({
   entry,
   isActive,
+  onClear,
   onOpen
 }: {
   entry: (typeof logbookEntries)[number];
   isActive: boolean;
+  onClear: () => void;
   onOpen: () => void;
 }) {
   const { clearIntent, scheduleIntent } = useHoverIntent(onOpen);
+  const clearCard = () => {
+    clearIntent();
+    onClear();
+  };
 
   return (
     <article
@@ -715,8 +724,9 @@ function LogCard({
       tabIndex={0}
       aria-label={`${entry.title} Details anzeigen`}
       onMouseEnter={scheduleIntent}
-      onMouseLeave={clearIntent}
+      onMouseLeave={clearCard}
       onFocus={onOpen}
+      onBlur={clearCard}
       onClick={onOpen}
     >
       <span className="selected-badge">FOCUS</span>
@@ -741,6 +751,30 @@ function LogDetail({ entry }: { entry: (typeof logbookEntries)[number] }) {
         </div>
       </div>
       <p className="detail-copy detail-copy--long" data-active-description>{entry.body}</p>
+    </article>
+  );
+}
+
+function ChatDetail({ feed }: { feed?: ServiceFeed }) {
+  const activeFeed = feed ?? fallbackSlackFeed;
+  const latestItem = activeFeed.items[0];
+
+  return (
+    <article className="detail-panel detail-panel--chat" aria-label="Chat Detail" data-active-detail>
+      <div className="detail-header">
+        <div className="service-icon service-icon--detail" aria-hidden="true">
+          <Slack size={24} strokeWidth={2} />
+        </div>
+        <div>
+          <span>Live Channel / {latestItem ? formatFeedTime(latestItem.createdAt) : "Standby"}</span>
+          <h3 data-active-title>{activeFeed.title}</h3>
+        </div>
+      </div>
+      <p className="detail-copy" data-active-description>
+        Standardfenster der Brücke. Freigegebene Chat-Nachrichten laufen hier im gleichen HUD-Stil ein,
+        ohne interne Rocket.Chat-Details oder Tokens an den Browser zu geben.
+      </p>
+      <SlackChannelPreview feed={activeFeed} />
     </article>
   );
 }
@@ -865,9 +899,8 @@ function App() {
   const { snapshot, socketState } = useHealth();
   const serviceInfoSnapshot = useServiceInfo();
   const [activeTheme, setActiveTheme] = useState<ThemeId>(() => applyInitialTheme());
-  const [activeLogId, setActiveLogId] = useState(logbookEntries[0]!.id);
+  const [activeLogId, setActiveLogId] = useState<string | null>(null);
   const [activeServiceId, setActiveServiceId] = useState<string | null>(null);
-  const lastPointerAt = useRef(Date.now());
   const services = snapshot?.services ?? [];
   const activeServices = services.filter((service) => service.state !== "planned");
   const plannedServices = services.filter((service) => service.state === "planned");
@@ -906,20 +939,6 @@ function App() {
   }, [activeServiceId, visibleServices]);
 
   useEffect(() => {
-    const markPointer = () => {
-      lastPointerAt.current = Date.now();
-    };
-    window.addEventListener("mousemove", markPointer);
-    window.addEventListener("pointerdown", markPointer);
-    window.addEventListener("keydown", markPointer);
-    return () => {
-      window.removeEventListener("mousemove", markPointer);
-      window.removeEventListener("pointerdown", markPointer);
-      window.removeEventListener("keydown", markPointer);
-    };
-  }, []);
-
-  useEffect(() => {
     let frame = 0;
     const trackPointerGlow = (event: PointerEvent) => {
       window.cancelAnimationFrame(frame);
@@ -935,27 +954,6 @@ function App() {
       window.removeEventListener("pointermove", trackPointerGlow);
     };
   }, []);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      if (Date.now() - lastPointerAt.current < POINTER_IDLE_MS) {
-        return;
-      }
-      setActiveLogId((current) => {
-        const index = Math.max(0, logbookEntries.findIndex((entry) => entry.id === current));
-        return logbookEntries[(index + 1) % logbookEntries.length]!.id;
-      });
-      setActiveServiceId((current) => {
-        if (visibleServices.length === 0) {
-          return current;
-        }
-        const index = Math.max(0, visibleServices.findIndex((service) => service.id === current));
-        return visibleServices[(index + 1) % visibleServices.length]?.id ?? current;
-      });
-    }, IDLE_ROTATION_MS);
-
-    return () => window.clearInterval(timer);
-  }, [visibleServices]);
 
   return (
     <main>
@@ -997,7 +995,9 @@ function App() {
 
       <Logbook
         activeLogId={activeLogId}
+        onClear={() => setActiveLogId(null)}
         onOpen={setActiveLogId}
+        slackFeed={slackPageFeed}
       />
 
       <section className="section-block" aria-labelledby="services-title">

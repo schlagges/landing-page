@@ -102,7 +102,7 @@ test("logbook is prominent above modules", async ({ page }) => {
 
   const logbook = page.locator(".logbook");
   const entries = logbook.locator(".logbook__entries");
-  const newsDetail = page.getByLabel("News Detail");
+  const chatDetail = page.getByLabel("Chat Detail");
   await expect(logbook).toBeVisible();
   await expect(logbook.getByRole("heading", { name: "Was passiert ist" })).toBeVisible();
   await expect(entries.getByText("Portal online")).toBeVisible();
@@ -112,7 +112,9 @@ test("logbook is prominent above modules", async ({ page }) => {
   await expect(entries.getByText("Slack angebunden")).toBeVisible();
   await expect(entries.getByText("06.05.2026").first()).toBeVisible();
   await expect(entries.getByText("07.05.2026")).toBeVisible();
-  await expect(newsDetail.getByText("Das Portal ist der sichtbare Einstiegspunkt")).toBeVisible();
+  await expect(chatDetail).toBeVisible();
+  await expect(chatDetail.getByRole("heading", { name: "#general" })).toBeVisible();
+  await expect(chatDetail.getByLabel("Slack Channel Vorschau")).toBeVisible();
 
   const logbookBox = await logbook.boundingBox();
   const modulesBox = await page.getByRole("heading", { name: "Module" }).boundingBox();
@@ -121,6 +123,7 @@ test("logbook is prominent above modules", async ({ page }) => {
   expect(logbookBox!.y).toBeLessThan(modulesBox!.y);
 
   await logbook.getByLabel("Portal online Details anzeigen").hover();
+  const newsDetail = page.getByLabel("News Detail");
   await expect(newsDetail.getByText("Das Portal ist der sichtbare Einstiegspunkt")).toBeVisible();
 
   await logbook.getByLabel("HUD Interface aktiviert Details anzeigen").hover();
@@ -202,18 +205,17 @@ test("desktop start screen does not require page scrolling", async ({ page }) =>
   expect(Math.max(overflow.body, overflow.document)).toBeLessThanOrEqual(overflow.viewport + 1);
 });
 
-test("idle autopilot rotates news and module details", async ({ page }) => {
+test("chat remains the default top detail when idle", async ({ page }) => {
   await page.goto("/");
 
-  const newsDetail = page.getByLabel("News Detail");
+  const chatDetail = page.getByLabel("Chat Detail");
   const moduleDetail = page.getByLabel("Modul Detail");
-  const initialNews = await newsDetail.getByRole("heading").textContent();
   const initialModule = await moduleDetail.getByRole("heading").textContent();
 
   await page.waitForTimeout(7200);
 
-  await expect(newsDetail.getByRole("heading")).not.toHaveText(initialNews ?? "");
-  await expect(moduleDetail.getByRole("heading")).not.toHaveText(initialModule ?? "");
+  await expect(chatDetail.getByRole("heading", { name: "#general" })).toBeVisible();
+  await expect(moduleDetail.getByRole("heading")).toHaveText(initialModule ?? "");
 });
 
 test("theme dock switches themes and persists selection", async ({ page }) => {

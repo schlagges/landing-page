@@ -1195,6 +1195,26 @@ h2 {
     0 0 18px rgba(var(--accent), 0.08);
 }
 
+.detail-panel--chat {
+  background:
+    radial-gradient(460px circle at 12% 0%, rgba(var(--accent-2), 0.18), transparent 55%),
+    radial-gradient(520px circle at 100% 20%, rgba(var(--accent), 0.16), transparent 58%),
+    linear-gradient(180deg, rgba(var(--accent), 0.08), var(--panel-strong));
+}
+
+.detail-panel--chat .slack-channel {
+  min-height: 0;
+  align-self: stretch;
+}
+
+.detail-panel--chat .slack-channel__stream {
+  align-content: start;
+}
+
+.detail-panel--chat .slack-channel__stream article {
+  padding: 10px 11px;
+}
+
 .slack-channel::before {
   content: "";
   position: absolute;
