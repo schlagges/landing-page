@@ -1,16 +1,48 @@
 stages:
+  - validate
+  - test
   - build
   - deploy
 
 variables:
   DOCKER_BUILDKIT: "1"
 
+.node_job:
+  image: node:22-bookworm
+  tags:
+    - ki-maschine
+  before_script:
+    - npm ci
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+
+lint:
+  extends: .node_job
+  stage: validate
+  script:
+    - npm run lint
+
+ui_review_landing_page:
+  extends: .node_job
+  image: mcr.microsoft.com/playwright:v1.57.0-noble
+  stage: test
+  script:
+    - npm run ui-review
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - layout-review-summary-landing-page.md
+      - playwright-report-ui-review/
+      - test-results-ui-review/
+
 build_image:
   stage: build
   tags:
     - ki-maschine
   rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
   script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
     - docker build --pull -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA" -t "$CI_REGISTRY_IMAGE:latest" .
@@ -24,7 +56,7 @@ deploy_prod:
   needs:
     - build_image
   rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
   script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
     - rsync -a --delete --exclude ".env" --exclude ".git" --exclude "node_modules" --exclude "dist" --exclude "test-results" --exclude "playwright-report" ./ /opt/stacks/landing-page/
