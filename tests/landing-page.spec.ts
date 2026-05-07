@@ -149,7 +149,10 @@ test("gitlab is an active module with public link", async ({ page }) => {
 
   const detail = page.getByLabel("Modul Detail");
   await expect(detail.getByRole("heading", { name: "GitLab" })).toBeVisible();
-  await expect(detail.getByRole("link", { name: /Öffnen/i })).toHaveAttribute("href", "https://gitlab.schnick-schnack.info");
+  await expect(detail.getByRole("link", { name: /Öffnen/i })).toHaveAttribute(
+    "href",
+    /https:\/\/gitlab\.schnick-schnack\.info\/?\?theme=crimson-command&layout=hud-command/
+  );
 });
 
 test("slack is an active module and realtime is hidden", async ({ page }) => {
@@ -165,12 +168,12 @@ test("slack is an active module and realtime is hidden", async ({ page }) => {
   await expect(detail.getByRole("heading", { name: "Slack" })).toBeVisible();
   await expect(detail.getByRole("link", { name: "Öffnen", exact: true })).toHaveAttribute(
     "href",
-    "https://slack.schnick-schnack.info"
+    /https:\/\/slack\.schnick-schnack\.info\/?\?theme=crimson-command&layout=hud-command/
   );
   await expect(detail.getByLabel("Slack Channel Vorschau")).toBeVisible();
   await expect(detail.getByRole("link", { name: /Channel öffnen/i })).toHaveAttribute(
     "href",
-    "https://chat.schnick-schnack.info/channel/landing-feed"
+    /https:\/\/chat\.schnick-schnack\.info\/channel\/landing-feed\?theme=crimson-command&layout=hud-command/
   );
 });
 
@@ -247,4 +250,47 @@ test("theme dock is vertical on desktop and includes extended themes", async ({ 
   const dockBox = await dock.boundingBox();
   expect(dockBox).not.toBeNull();
   expect(dockBox!.height).toBeGreaterThan(dockBox!.width * 1.5);
+});
+
+test("layout dock switches layouts and persists selection", async ({ page }) => {
+  await page.goto("/");
+
+  const orbital = page.getByRole("button", { name: "Layout Orbital Command aktivieren" });
+  await expect(orbital).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-layout", "hud-command");
+
+  await orbital.click();
+  await expect(page.locator("html")).toHaveAttribute("data-layout", "orbital-command");
+  await expect(orbital).toHaveAttribute("aria-pressed", "true");
+
+  const storedLayout = await page.evaluate(() => window.localStorage.getItem("schnick-schnack.layout"));
+  expect(storedLayout).toBe("orbital-command");
+
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-layout", "orbital-command");
+});
+
+test("layout dock offers distinct display systems and services receive design params", async ({ page }) => {
+  await page.goto("/");
+
+  const dock = page.getByLabel("Layout Auswahl");
+  await expect(dock.getByRole("button", { name: "Layout Cyberpunk Terminal aktivieren" })).toBeVisible();
+  await expect(dock.getByRole("button", { name: "Layout Glass Ops aktivieren" })).toBeVisible();
+  await expect(dock.getByRole("button", { name: "Layout Tactical Grid aktivieren" })).toBeVisible();
+  await expect(dock.getByRole("button", { name: "Layout Data Core aktivieren" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Theme Violet Warp aktivieren" }).click();
+  await dock.getByRole("button", { name: "Layout Data Core aktivieren" }).click();
+  await page.getByLabel("Voice Details anzeigen").click();
+
+  await expect(page.getByLabel("Modul Detail").getByRole("link", { name: /Öffnen/i })).toHaveAttribute(
+    "href",
+    /theme=violet-warp&layout=data-core/
+  );
+
+  const designResponse = await page.request.get("/api/design-preferences");
+  expect(designResponse.ok()).toBe(true);
+  const design = await designResponse.json();
+  expect(design.layouts).toContain("data-core");
+  expect(design.storage.theme).toBe("schnick-schnack.theme");
 });

@@ -7,7 +7,8 @@ import {
   RefreshCw,
   ShieldCheck,
   Slack,
-  SwatchBook
+  SwatchBook,
+  Workflow
 } from "lucide-react";
 import { StrictMode, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -106,7 +107,9 @@ type SocketState = "connecting" | "live" | "fallback";
 const HEALTH_REFRESH_MS = 10000;
 const HOVER_INTENT_MS = 360;
 const STORAGE_KEY = "schnick-schnack.theme";
+const LAYOUT_STORAGE_KEY = "schnick-schnack.layout";
 const DEFAULT_THEME = "crimson-command";
+const DEFAULT_LAYOUT = "hud-command";
 const THEMES = [
   { id: "crimson-command", label: "Crimson Command", colors: ["#6ffdf0", "#ff566f"] },
   { id: "neon-ice", label: "Neon Ice", colors: ["#8be1ff", "#e6faff"] },
@@ -118,7 +121,17 @@ const THEMES = [
   { id: "ghost-glass", label: "Ghost Glass", colors: ["#f7fbff", "#8aa7ff"] }
 ] as const;
 
+const LAYOUTS = [
+  { id: "hud-command", label: "HUD Command", glyph: "HUD" },
+  { id: "orbital-command", label: "Orbital Command", glyph: "ORB" },
+  { id: "cyberpunk-terminal", label: "Cyberpunk Terminal", glyph: "CYB" },
+  { id: "glass-ops", label: "Glass Ops", glyph: "GLS" },
+  { id: "tactical-grid", label: "Tactical Grid", glyph: "TAC" },
+  { id: "data-core", label: "Data Core", glyph: "DAT" }
+] as const;
+
 type ThemeId = (typeof THEMES)[number]["id"];
+type LayoutId = (typeof LAYOUTS)[number]["id"];
 type ViewTransitionDocument = Document & {
   startViewTransition?: (callback: () => void) => void;
 };
@@ -161,6 +174,10 @@ function normalizeTheme(theme: string | null | undefined): ThemeId {
   return THEMES.some((item) => item.id === theme) ? (theme as ThemeId) : DEFAULT_THEME;
 }
 
+function normalizeLayout(layout: string | null | undefined): LayoutId {
+  return LAYOUTS.some((item) => item.id === layout) ? (layout as LayoutId) : DEFAULT_LAYOUT;
+}
+
 function isStorageAvailable(): boolean {
   try {
     const testKey = "__theme_test__";
@@ -172,12 +189,18 @@ function isStorageAvailable(): boolean {
   }
 }
 
+function writeDesignCookie(key: string, value: string) {
+  document.cookie = `${key}=${encodeURIComponent(value)}; Path=/; Domain=.schnick-schnack.info; Max-Age=31536000; SameSite=Lax`;
+}
+
 function applyTheme(theme: ThemeId, shouldSave = true) {
   document.documentElement.dataset.theme = theme;
 
   if (shouldSave && isStorageAvailable()) {
     window.localStorage.setItem(STORAGE_KEY, theme);
   }
+
+  writeDesignCookie(STORAGE_KEY, theme);
 }
 
 function applyInitialTheme(): ThemeId {
@@ -185,6 +208,34 @@ function applyInitialTheme(): ThemeId {
   const initialTheme = normalizeTheme(savedTheme);
   applyTheme(initialTheme, false);
   return initialTheme;
+}
+
+function applyLayout(layout: LayoutId, shouldSave = true) {
+  document.documentElement.dataset.layout = layout;
+
+  if (shouldSave && isStorageAvailable()) {
+    window.localStorage.setItem(LAYOUT_STORAGE_KEY, layout);
+  }
+
+  writeDesignCookie(LAYOUT_STORAGE_KEY, layout);
+}
+
+function applyInitialLayout(): LayoutId {
+  const savedLayout = isStorageAvailable() ? window.localStorage.getItem(LAYOUT_STORAGE_KEY) : null;
+  const initialLayout = normalizeLayout(savedLayout);
+  applyLayout(initialLayout, false);
+  return initialLayout;
+}
+
+function withDesignParams(href: string, theme: ThemeId, layout: LayoutId): string {
+  try {
+    const url = new URL(href, window.location.origin);
+    url.searchParams.set("theme", theme);
+    url.searchParams.set("layout", layout);
+    return url.toString();
+  } catch {
+    return href;
+  }
 }
 
 const wordPermutations = [
@@ -512,9 +563,10 @@ const fallbackSlackFeed: ServiceFeed = {
   ]
 };
 
-function SlackChannelPreview({ feed }: { feed?: ServiceFeed }) {
+function SlackChannelPreview({ feed, layout, theme }: { feed?: ServiceFeed; layout?: LayoutId; theme?: ThemeId }) {
   const activeFeed = feed ?? fallbackSlackFeed;
-  const channelUrl = activeFeed.href ?? fallbackSlackFeed.href;
+  const channelUrl = activeFeed.href ?? fallbackSlackFeed.href ?? "https://chat.schnick-schnack.info/channel/landing-feed";
+  const channelHref = theme && layout ? withDesignParams(channelUrl, theme, layout) : channelUrl;
 
   return (
     <section className="slack-channel" aria-label="Slack Channel Vorschau">
@@ -523,7 +575,7 @@ function SlackChannelPreview({ feed }: { feed?: ServiceFeed }) {
           <span>Channel Bridge</span>
           <strong>{activeFeed.title}</strong>
         </div>
-        <a href={channelUrl}>
+        <a href={channelHref}>
           Channel öffnen
           <ArrowUpRight size={15} aria-hidden="true" />
         </a>
@@ -553,10 +605,11 @@ function SlackChannelPreview({ feed }: { feed?: ServiceFeed }) {
   );
 }
 
-function SlackPageChannel({ feed }: { feed?: ServiceFeed }) {
+function SlackPageChannel({ feed, layout, theme }: { feed?: ServiceFeed; layout: LayoutId; theme: ThemeId }) {
   const activeFeed = feed ?? fallbackSlackFeed;
   const latestItem = activeFeed.items[0];
-  const channelUrl = activeFeed.href ?? fallbackSlackFeed.href;
+  const channelUrl = activeFeed.href ?? fallbackSlackFeed.href ?? "https://chat.schnick-schnack.info/channel/landing-feed";
+  const channelHref = withDesignParams(channelUrl, theme, layout);
 
   return (
     <section className="page-channel" aria-label="Slack Kanal">
@@ -575,7 +628,7 @@ function SlackPageChannel({ feed }: { feed?: ServiceFeed }) {
           "Channel-Bridge wartet auf freigegebene Nachrichten."
         )}
       </p>
-      <a href={channelUrl}>
+      <a href={channelHref}>
         Öffnen
         <ArrowUpRight size={15} aria-hidden="true" />
       </a>
@@ -792,11 +845,15 @@ function ChatDetail({ feed }: { feed?: ServiceFeed }) {
 function ServiceDetail({
   service,
   generatedAt,
-  serviceInfo
+  serviceInfo,
+  layout,
+  theme
 }: {
   service: PublicService | undefined;
   generatedAt: string | null;
   serviceInfo: ServiceInfoResult | undefined;
+  layout: LayoutId;
+  theme: ThemeId;
 }) {
   if (!service) {
     return null;
@@ -834,7 +891,7 @@ function ServiceDetail({
         {infoData?.metrics?.length ? <ServiceInfoMetrics metrics={infoData.metrics} /> : null}
         {infoData?.charts?.length ? <ServiceInfoCharts charts={infoData.charts} /> : null}
         {infoData?.sections?.length ? <ServiceInfoSections sections={infoData.sections} /> : null}
-        {service.id === "slack" ? <SlackChannelPreview feed={slackFeed} /> : null}
+        {service.id === "slack" ? <SlackChannelPreview feed={slackFeed} layout={layout} theme={theme} /> : null}
         {!infoData ? (
           <p className="service-info-empty">
             {serviceInfo?.message ?? "Service-Info-API wird geprüft. Dienste können den öffentlichen Info-Endpunkt später implementieren."}
@@ -845,13 +902,13 @@ function ServiceDetail({
       <div className="service-actions" aria-label={`${service.name} Aktionen`}>
         {serviceActions ? (
           serviceActions.map((action) => (
-            <a className="service-card__link" href={action.href} key={action.id}>
+            <a className="service-card__link" href={withDesignParams(action.href, theme, layout)} key={action.id}>
               {action.label}
               <ArrowUpRight size={17} aria-hidden="true" />
             </a>
           ))
         ) : service.href ? (
-          <a className="service-card__link" href={service.href}>
+          <a className="service-card__link" href={withDesignParams(service.href, theme, layout)}>
             Öffnen
             <ArrowUpRight size={17} aria-hidden="true" />
           </a>
@@ -905,10 +962,44 @@ function ThemeDock({
   );
 }
 
+function LayoutDock({
+  activeLayout,
+  onLayoutChange
+}: {
+  activeLayout: LayoutId;
+  onLayoutChange: (layout: LayoutId) => void;
+}) {
+  return (
+    <aside className="layout-dock" aria-label="Layout Auswahl">
+      <div className="layout-dock__label">
+        <Workflow size={15} aria-hidden="true" />
+        <span>Layout</span>
+      </div>
+      <div className="layout-dock__chips">
+        {LAYOUTS.map((layout) => (
+          <button
+            aria-label={`Layout ${layout.label} aktivieren`}
+            aria-pressed={activeLayout === layout.id}
+            className={`layout-chip layout-chip--${layout.id}${activeLayout === layout.id ? " is-active" : ""}`}
+            data-layout-choice={layout.id}
+            key={layout.id}
+            onClick={() => onLayoutChange(layout.id)}
+            type="button"
+          >
+            <span className="layout-chip__glyph" aria-hidden="true">{layout.glyph}</span>
+            <span>{layout.label}</span>
+          </button>
+        ))}
+      </div>
+    </aside>
+  );
+}
+
 function App() {
   const { snapshot, socketState } = useHealth();
   const serviceInfoSnapshot = useServiceInfo();
   const [activeTheme, setActiveTheme] = useState<ThemeId>(() => applyInitialTheme());
+  const [activeLayout, setActiveLayout] = useState<LayoutId>(() => applyInitialLayout());
   const [activeLogId, setActiveLogId] = useState<string | null>(null);
   const [activeServiceId, setActiveServiceId] = useState<string | null>(null);
   const services = snapshot?.services ?? [];
@@ -931,6 +1022,21 @@ function App() {
     const update = () => {
       setActiveTheme(theme);
       applyTheme(theme);
+    };
+
+    const viewTransitionDocument = document as ViewTransitionDocument;
+    if (viewTransitionDocument.startViewTransition && !prefersReducedMotion()) {
+      viewTransitionDocument.startViewTransition(update);
+      return;
+    }
+
+    update();
+  }
+
+  function changeLayout(layout: LayoutId) {
+    const update = () => {
+      setActiveLayout(layout);
+      applyLayout(layout);
     };
 
     const viewTransitionDocument = document as ViewTransitionDocument;
@@ -999,7 +1105,7 @@ function App() {
           <RefreshCw size={17} aria-hidden="true" className={socketState === "live" ? "spin-soft" : ""} />
           <span>{socketState === "live" ? "Live per WebSocket" : "Fallback per Abfrage"}</span>
         </div>
-        <SlackPageChannel feed={slackPageFeed} />
+        <SlackPageChannel feed={slackPageFeed} layout={activeLayout} theme={activeTheme} />
         <span>Letzte Aktualisierung: {formatTime(snapshot?.generatedAt ?? null)}</span>
       </section>
 
@@ -1043,9 +1149,12 @@ function App() {
             service={activeService}
             generatedAt={snapshot?.generatedAt ?? null}
             serviceInfo={activeService ? serviceInfoById.get(activeService.id) : undefined}
+            layout={activeLayout}
+            theme={activeTheme}
           />
         </div>
       </section>
+      <LayoutDock activeLayout={activeLayout} onLayoutChange={changeLayout} />
       <ThemeDock activeTheme={activeTheme} onThemeChange={changeTheme} />
     </main>
   );

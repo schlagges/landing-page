@@ -595,6 +595,42 @@ app.get("/api/service-info/:serviceId", (request, response) => {
   response.json(serviceInfo);
 });
 
+app.get("/api/design-preferences", (_request, response) => {
+  response.json({
+    defaults: {
+      theme: "crimson-command",
+      layout: "hud-command"
+    },
+    storage: {
+      theme: "schnick-schnack.theme",
+      layout: "schnick-schnack.layout"
+    },
+    cookies: {
+      domain: ".schnick-schnack.info",
+      sameSite: "Lax"
+    },
+    queryParams: ["theme", "layout"],
+    themes: [
+      "crimson-command",
+      "neon-ice",
+      "violet-warp",
+      "amber-terminal",
+      "bio-matrix",
+      "solar-flare",
+      "deep-ocean",
+      "ghost-glass"
+    ],
+    layouts: [
+      "hud-command",
+      "orbital-command",
+      "cyberpunk-terminal",
+      "glass-ops",
+      "tactical-grid",
+      "data-core"
+    ]
+  });
+});
+
 const openApiDocument = {
   openapi: "3.1.0",
   info: {
