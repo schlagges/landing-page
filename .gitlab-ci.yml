@@ -81,6 +81,8 @@ deploy_prod:
     - ki-maschine
   needs:
     - build_image
+  before_script:
+    - apk add --no-cache rsync
   rules:
     - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
   script:
