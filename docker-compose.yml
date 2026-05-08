@@ -1,7 +1,12 @@
 services:
   landing-page:
     image: ${LANDING_PAGE_IMAGE:-landing-page-landing-page}
-    build: .
+    build:
+      context: .
+      args:
+        VITE_KEYCLOAK_AUTH_URL: ${VITE_KEYCLOAK_AUTH_URL:-}
+        VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-}
+        VITE_KEYCLOAK_CODE_CHALLENGE: ${VITE_KEYCLOAK_CODE_CHALLENGE:-}
     container_name: landing-page
     network_mode: host
     restart: unless-stopped
@@ -14,9 +19,15 @@ services:
       HEALTH_AUTH_URL: ${HEALTH_AUTH_URL:-http://127.0.0.1:8081/realms/master/.well-known/openid-configuration}
       HEALTH_SLACK_URL: ${HEALTH_SLACK_URL:-http://127.0.0.1:3010/}
       HEALTH_GITLAB_URL: ${HEALTH_GITLAB_URL:-https://labs.schnick-schnack.info/schnick-schnack/landing-page}
+      SCHNACK_TO_TEXT_URL: ${SCHNACK_TO_TEXT_URL:-}
+      HEALTH_SCHNACK_TO_TEXT_URL: ${HEALTH_SCHNACK_TO_TEXT_URL:-}
+      LLM_HUB_URL: ${LLM_HUB_URL:-}
+      HEALTH_LLM_HUB_URL: ${HEALTH_LLM_HUB_URL:-}
       INFO_VOICE_URL: ${INFO_VOICE_URL:-http://127.0.0.1:3000/.well-known/schnick-schnack/service-info.json}
       INFO_SLACK_URL: ${INFO_SLACK_URL:-http://127.0.0.1:3021/.well-known/schnick-schnack/service-info.json}
       INFO_GITLAB_URL: ${INFO_GITLAB_URL:-https://labs.schnick-schnack.info/.well-known/schnick-schnack/service-info.json}
+      INFO_SCHNACK_TO_TEXT_URL: ${INFO_SCHNACK_TO_TEXT_URL:-}
+      INFO_LLM_HUB_URL: ${INFO_LLM_HUB_URL:-}
       ROCKET_CHAT_URL: ${ROCKET_CHAT_URL:-http://127.0.0.1:3010/}
       ROCKET_CHAT_CHANNEL: ${ROCKET_CHAT_CHANNEL:-landing-feed}
       ROCKET_CHAT_CHANNEL_URL: ${ROCKET_CHAT_CHANNEL_URL:-https://chat.schnick-schnack.info/channel/landing-feed}

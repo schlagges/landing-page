@@ -1,20 +1,23 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const port = process.env.PORT ?? "18080";
+const baseURL = `http://127.0.0.1:${port}`;
+
 export default defineConfig({
   testDir: "./tests",
   timeout: 30000,
   use: {
-    baseURL: "http://127.0.0.1:18080",
+    baseURL,
     launchOptions: {
       executablePath: process.env.PLAYWRIGHT_CHROME_EXECUTABLE ?? "/usr/bin/google-chrome"
     },
     trace: "retain-on-failure"
   },
   webServer: {
-    command: "PORT=18080 npm start",
+    command: `PORT=${port} npm start`,
     reuseExistingServer: !process.env.CI,
     timeout: 15000,
-    url: "http://127.0.0.1:18080"
+    url: baseURL
   },
   projects: [
     {

@@ -1,18 +1,20 @@
 import express from "express";
 import { createServer } from "node:http";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 
 type ServiceState = "online" | "degraded" | "offline" | "checking" | "planned";
-type ServiceCategory = "communication" | "identity" | "development" | "roadmap";
+type ServiceCategory = "communication" | "identity" | "development" | "ai" | "roadmap";
 
 type PublicService = {
   id: string;
   name: string;
   category: ServiceCategory;
-  icon: "mic" | "shield" | "gitlab" | "slack";
+  icon: "brain" | "file-text" | "mic" | "shield" | "gitlab" | "slack";
   href: string | null;
+  unavailableActionLabel?: string;
   description: string;
   state: ServiceState;
   message: string;
@@ -28,6 +30,7 @@ type HealthTarget = {
   category: ServiceCategory;
   icon: PublicService["icon"];
   href: string | null;
+  unavailableActionLabel?: string;
   description: string;
   url?: string;
   okStatuses?: number[];
@@ -39,6 +42,10 @@ type HealthSnapshot = {
   generatedAt: string;
   overall: Exclude<ServiceState, "planned">;
   services: PublicService[];
+};
+
+type BuildInfo = {
+  builtAt: string | null;
 };
 
 type ServiceInfoState = "checking" | "available" | "unsupported" | "error" | "planned";
@@ -125,6 +132,20 @@ const ROCKET_CHAT_MESSAGE_LIMIT = Math.min(
   Math.max(1, Number.parseInt(process.env.ROCKET_CHAT_MESSAGE_LIMIT ?? "5", 10) || 5)
 );
 
+function readBuildInfo(): BuildInfo {
+  try {
+    const raw = readFileSync(path.resolve("dist", "build-info.json"), "utf8");
+    const data = JSON.parse(raw) as Partial<BuildInfo>;
+    return {
+      builtAt: typeof data.builtAt === "string" ? data.builtAt : null
+    };
+  } catch {
+    return { builtAt: null };
+  }
+}
+
+const buildInfo = readBuildInfo();
+
 function defaultInfoUrl(href: string | null): string | null {
   if (!href) {
     return null;
@@ -132,6 +153,18 @@ function defaultInfoUrl(href: string | null): string | null {
 
   return new URL(SERVICE_INFO_PATH, href).toString();
 }
+
+function optionalEnv(name: string): string | null {
+  const value = process.env[name]?.trim();
+  return value ? value : null;
+}
+
+const SCHNACK_TO_TEXT_URL = optionalEnv("SCHNACK_TO_TEXT_URL");
+const SCHNACK_TO_TEXT_HEALTH_URL = optionalEnv("HEALTH_SCHNACK_TO_TEXT_URL") ?? SCHNACK_TO_TEXT_URL ?? undefined;
+const SCHNACK_TO_TEXT_INFO_URL = optionalEnv("INFO_SCHNACK_TO_TEXT_URL") ?? defaultInfoUrl(SCHNACK_TO_TEXT_URL);
+const LLM_HUB_URL = optionalEnv("LLM_HUB_URL");
+const LLM_HUB_HEALTH_URL = optionalEnv("HEALTH_LLM_HUB_URL") ?? LLM_HUB_URL ?? undefined;
+const LLM_HUB_INFO_URL = optionalEnv("INFO_LLM_HUB_URL") ?? defaultInfoUrl(LLM_HUB_URL);
 
 const targets: HealthTarget[] = [
   {
@@ -170,6 +203,30 @@ const targets: HealthTarget[] = [
     okStatuses: [200, 204, 301, 302, 307, 308, 401, 403]
   },
   {
+    id: "schnack-to-text",
+    name: "Schnack To Text",
+    category: "communication",
+    icon: "file-text",
+    href: SCHNACK_TO_TEXT_URL,
+    unavailableActionLabel: "Noch nicht in Prod",
+    description: "Audio-Mitschnitt mit Transkription und automatischer Zusammenfassung.",
+    url: SCHNACK_TO_TEXT_HEALTH_URL,
+    infoUrl: SCHNACK_TO_TEXT_INFO_URL,
+    okStatuses: [200, 204, 301, 302, 307, 308, 401, 403]
+  },
+  {
+    id: "llm-hub",
+    name: "LLM Hub",
+    category: "ai",
+    icon: "brain",
+    href: LLM_HUB_URL,
+    unavailableActionLabel: "Noch nicht in Prod",
+    description: "Zentraler Zugang zu LLM-Tools, Modellen und Experimenten.",
+    url: LLM_HUB_HEALTH_URL,
+    infoUrl: LLM_HUB_INFO_URL,
+    okStatuses: [200, 204, 301, 302, 307, 308, 401, 403]
+  },
+  {
     id: "gitlab",
     name: "GitLab",
     category: "development",
@@ -205,9 +262,10 @@ let latestSnapshot: HealthSnapshot = {
     category: target.category,
     icon: target.icon,
     href: target.href,
+    unavailableActionLabel: target.unavailableActionLabel,
     description: target.description,
     state: target.url ? "checking" : "planned",
-    message: target.url ? "Status wird geprüft." : "Geplant.",
+    message: target.url ? "Status wird geprüft." : target.unavailableActionLabel ?? "Geplant.",
     updatedAt: null,
     responseMs: null,
     infoState: latestServiceInfo[target.id]?.status ?? (target.url ? "checking" : "planned"),
@@ -481,9 +539,10 @@ async function checkTarget(target: HealthTarget): Promise<PublicService> {
       category: target.category,
       icon: target.icon,
       href: target.href,
+      unavailableActionLabel: target.unavailableActionLabel,
       description: target.description,
       state: "planned",
-      message: "Geplant.",
+      message: target.unavailableActionLabel ?? "Geplant.",
       updatedAt: new Date().toISOString(),
       responseMs: null,
       infoState: latestServiceInfo[target.id]?.status ?? "planned",
@@ -511,6 +570,7 @@ async function checkTarget(target: HealthTarget): Promise<PublicService> {
       category: target.category,
       icon: target.icon,
       href: target.href,
+      unavailableActionLabel: target.unavailableActionLabel,
       description: target.description,
       state: isExpected ? "online" : "degraded",
       message: isExpected ? "Dienst antwortet." : "Dienst antwortet unerwartet.",
@@ -526,6 +586,7 @@ async function checkTarget(target: HealthTarget): Promise<PublicService> {
       category: target.category,
       icon: target.icon,
       href: target.href,
+      unavailableActionLabel: target.unavailableActionLabel,
       description: target.description,
       state: "offline",
       message: "Dienst ist aktuell nicht erreichbar.",
@@ -577,6 +638,10 @@ app.disable("x-powered-by");
 
 app.get("/api/health", (_request, response) => {
   response.json(latestSnapshot);
+});
+
+app.get("/api/build-info", (_request, response) => {
+  response.json(buildInfo);
 });
 
 app.get("/api/service-info", (_request, response) => {

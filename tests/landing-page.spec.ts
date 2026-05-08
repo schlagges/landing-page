@@ -9,17 +9,34 @@ test("service info OpenAPI and aggregation endpoints are available", async ({ pa
   expect(openApi.components.schemas.ServiceFeed).toBeTruthy();
   expect(openApi.components.schemas.ServiceInfo.properties.feeds).toBeTruthy();
 
+  const buildInfoResponse = await page.request.get("/api/build-info");
+  expect(buildInfoResponse.ok()).toBe(true);
+  const buildInfo = await buildInfoResponse.json();
+  expect(typeof buildInfo.builtAt === "string" || buildInfo.builtAt === null).toBe(true);
+
   const serviceInfoResponse = await page.request.get("/api/service-info");
   expect(serviceInfoResponse.ok()).toBe(true);
   const serviceInfo = await serviceInfoResponse.json();
   expect(Array.isArray(serviceInfo.services)).toBe(true);
   expect(serviceInfo.services.some((service: { serviceId: string }) => service.serviceId === "voice")).toBe(true);
   expect(serviceInfo.services.some((service: { serviceId: string }) => service.serviceId === "slack")).toBe(true);
+  expect(serviceInfo.services.some((service: { serviceId: string }) => service.serviceId === "schnack-to-text")).toBe(true);
+  expect(serviceInfo.services.some((service: { serviceId: string }) => service.serviceId === "llm-hub")).toBe(true);
   expect(serviceInfo.services.some((service: { serviceId: string }) => service.serviceId === "gitlab")).toBe(true);
 
   const healthResponse = await page.request.get("/api/health");
   expect(healthResponse.ok()).toBe(true);
   const health = await healthResponse.json();
+  const schnackToText = health.services.find(
+    (service: { id: string; href: string | null; message: string }) => service.id === "schnack-to-text"
+  );
+  expect(schnackToText?.href).toBeNull();
+  expect(schnackToText?.message).toBe("Noch nicht in Prod");
+  const llmHub = health.services.find(
+    (service: { id: string; href: string | null; message: string }) => service.id === "llm-hub"
+  );
+  expect(llmHub?.href).toBeNull();
+  expect(llmHub?.message).toBe("Noch nicht in Prod");
   const gitlab = health.services.find((service: { id: string; href: string | null }) => service.id === "gitlab");
   expect(gitlab?.href).toBe("https://labs.schnick-schnack.info/schnick-schnack/landing-page");
 });
@@ -34,7 +51,17 @@ test("desktop renders the Schnick Schnack app layout from the reference", async 
   await expect(page.getByRole("button", { name: "Übersicht" })).toHaveClass(/is-active/);
   await expect(page.getByRole("heading", { name: "Übersicht" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Voice. Connect. Collaborate." })).toHaveCount(0);
+  await expect(page.getByText("Letzter Build")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Verfügbare Dienste" })).toBeVisible();
+  const schnackToText = page.getByLabel("Schnack To Text System");
+  await expect(schnackToText).toBeVisible();
+  await expect(schnackToText.getByText("Audio-Mitschnitt mit Transkription und automatischer Zusammenfassung.")).toBeVisible();
+  await expect(schnackToText.getByText("Noch nicht in Prod", { exact: true })).toBeVisible();
+  await expect(schnackToText).toBeInViewport();
+  const llmHub = page.getByLabel("LLM Hub System");
+  await expect(llmHub).toBeVisible();
+  await expect(llmHub.getByText("Zentraler Zugang zu LLM-Tools, Modellen und Experimenten.")).toBeVisible();
+  await expect(llmHub.getByText("Noch nicht in Prod", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Öffentliche Updates" })).toBeVisible();
   await expect(page.getByText("Globaler Chat")).toBeVisible();
   await expect(page.locator(".status-dashboard").getByText("Systemstatus")).toBeVisible();
@@ -47,12 +74,38 @@ test("left navigation changes the active section", async ({ page }) => {
   await systems.click();
   await expect(systems).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("heading", { name: "Öffentliche Systemdetails" })).toBeVisible();
+  await expect(page).toHaveURL(/section=systems/);
 
   const news = page.getByRole("button", { name: "News", exact: true });
   await news.click();
   await expect(news).toHaveAttribute("aria-pressed", "true");
   await expect(systems).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByRole("heading", { name: "Öffentliche Meldungen" })).toBeVisible();
+  await expect(page).toHaveURL(/section=news/);
+});
+
+test("login link preserves current section and existing login state", async ({ page }) => {
+  await page.goto("/?section=news&login_state=present");
+
+  await expect(page.getByRole("button", { name: "News", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("heading", { name: "Öffentliche Meldungen" })).toBeVisible();
+
+  const href = await page.getByRole("link", { name: "Anmelden" }).first().getAttribute("href");
+  expect(href).toBeTruthy();
+
+  const loginUrl = new URL(href!);
+  expect(loginUrl.origin).toBe("https://auth.schnick-schnack.info");
+  expect(loginUrl.pathname).toBe("/realms/master/protocol/openid-connect/auth");
+  expect(loginUrl.searchParams.get("client_id")).toBe("landing-page");
+  expect(loginUrl.searchParams.get("response_type")).toBe("code");
+  expect(loginUrl.searchParams.get("scope")).toBe("openid");
+  expect(loginUrl.searchParams.get("code_challenge")).toBe("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM");
+  expect(loginUrl.searchParams.get("code_challenge_method")).toBe("S256");
+  expect(loginUrl.searchParams.get("state")).toBe("present");
+
+  const redirectUri = new URL(loginUrl.searchParams.get("redirect_uri")!);
+  expect(redirectUri.searchParams.get("section")).toBe("news");
+  expect(redirectUri.searchParams.get("theme")).toBe("dark");
 });
 
 test("side navigation opens detailed status and channel views", async ({ page }) => {
@@ -76,6 +129,14 @@ test("mobile uses a stacked dashboard without sidebar navigation", async ({ page
   await expect(page.getByRole("heading", { name: "Verfügbare Dienste" })).toBeVisible();
   await expect(page.getByText("Globaler Chat")).toBeVisible();
   await expect(page.locator(".status-dashboard").getByText("Systemstatus")).toBeVisible();
+
+  const width = await page.evaluate(() => ({
+    body: document.body.scrollWidth,
+    document: document.documentElement.scrollWidth,
+    viewport: window.innerWidth
+  }));
+
+  expect(Math.max(width.body, width.document)).toBeLessThanOrEqual(width.viewport);
 });
 
 test("theme toggle switches between dark and light and persists", async ({ page }) => {

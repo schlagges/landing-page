@@ -1,5 +1,6 @@
 import {
   ArrowUpRight,
+  BrainCircuit,
   CheckCircle2,
   CircleGauge,
   Clock3,
@@ -20,19 +21,24 @@ import { createRoot } from "react-dom/client";
 import "./styles.css";
 
 type ServiceState = "online" | "degraded" | "offline" | "checking" | "planned";
-type ServiceCategory = "communication" | "identity" | "development" | "roadmap";
+type ServiceCategory = "communication" | "identity" | "development" | "ai" | "roadmap";
 type ServiceInfoState = "checking" | "available" | "unsupported" | "error" | "planned";
 type ThemeId = (typeof THEMES)[number]["id"];
 type NavSection = "overview" | "systems" | "channels" | "status" | "news";
 type SocketState = "connecting" | "live" | "fallback";
 type RowTone = "green" | "blue" | "violet" | "amber";
+type LoginState = {
+  name: string;
+  value: string;
+};
 
 type PublicService = {
   id: string;
   name: string;
   category: ServiceCategory;
-  icon: "mic" | "shield" | "gitlab" | "slack";
+  icon: "brain" | "file-text" | "mic" | "shield" | "gitlab" | "slack";
   href: string | null;
+  unavailableActionLabel?: string;
   description: string;
   state: ServiceState;
   message: string;
@@ -46,6 +52,10 @@ type HealthSnapshot = {
   generatedAt: string;
   overall: Exclude<ServiceState, "planned">;
   services: PublicService[];
+};
+
+type BuildInfo = {
+  builtAt: string | null;
 };
 
 type ServiceMetric = {
@@ -118,6 +128,12 @@ type ViewTransitionDocument = Document & {
 const HEALTH_REFRESH_MS = 10000;
 const STORAGE_KEY = "schnick-schnack.theme";
 const DEFAULT_THEME = "dark";
+const KEYCLOAK_AUTH_URL =
+  import.meta.env.VITE_KEYCLOAK_AUTH_URL ??
+  "https://auth.schnick-schnack.info/realms/master/protocol/openid-connect/auth";
+const KEYCLOAK_CLIENT_ID = import.meta.env.VITE_KEYCLOAK_CLIENT_ID ?? "landing-page";
+const KEYCLOAK_CODE_CHALLENGE =
+  import.meta.env.VITE_KEYCLOAK_CODE_CHALLENGE ?? "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
 const THEMES = [
   { id: "dark", label: "Dark" },
   { id: "light", label: "Light" }
@@ -147,11 +163,17 @@ const infoStateLabels: Record<ServiceInfoState, string> = {
 };
 
 const iconMap = {
+  brain: BrainCircuit,
+  "file-text": FileText,
   gitlab: GitBranch,
   mic: Mic2,
   shield: ShieldCheck,
   slack: Slack
 };
+
+const SECTION_PARAM = "section";
+const LOGIN_STATE_PARAMS = ["login_state", "log_state", "auth_state", "state", "logged_in"] as const;
+const LOGIN_STATE_COOKIES = ["schnick_schnack_login_state", "schnick-schnack.login_state", "login_state"] as const;
 
 const navItems = [
   { id: "overview", label: "Übersicht", icon: CircleGauge },
@@ -167,6 +189,10 @@ function prefersReducedMotion(): boolean {
 
 function normalizeTheme(theme: string | null | undefined): ThemeId {
   return THEMES.some((item) => item.id === theme) ? (theme as ThemeId) : DEFAULT_THEME;
+}
+
+function normalizeSection(section: string | null | undefined): NavSection {
+  return navItems.some((item) => item.id === section) ? (section as NavSection) : "overview";
 }
 
 function isStorageAvailable(): boolean {
@@ -195,10 +221,74 @@ function applyTheme(theme: ThemeId, shouldSave = true) {
 }
 
 function applyInitialTheme(): ThemeId {
+  const queryTheme = new URLSearchParams(window.location.search).get("theme");
   const savedTheme = isStorageAvailable() ? window.localStorage.getItem(STORAGE_KEY) : null;
-  const initialTheme = normalizeTheme(savedTheme);
-  applyTheme(initialTheme, false);
+  const initialTheme = normalizeTheme(queryTheme ?? savedTheme);
+  applyTheme(initialTheme, Boolean(queryTheme));
   return initialTheme;
+}
+
+function initialSection(): NavSection {
+  const url = new URL(window.location.href);
+  const querySection = url.searchParams.get(SECTION_PARAM);
+  const hashSection = url.hash.startsWith("#") ? url.hash.slice(1) : null;
+  return normalizeSection(querySection ?? hashSection);
+}
+
+function readCookie(name: string): string | null {
+  const prefix = `${name}=`;
+  const match = document.cookie
+    .split(";")
+    .map((item) => item.trim())
+    .find((item) => item.startsWith(prefix));
+
+  if (!match) {
+    return null;
+  }
+
+  try {
+    return decodeURIComponent(match.slice(prefix.length));
+  } catch {
+    return match.slice(prefix.length);
+  }
+}
+
+function readLoginState(): LoginState | null {
+  const params = new URLSearchParams(window.location.search);
+  for (const name of LOGIN_STATE_PARAMS) {
+    const value = params.get(name);
+    if (value) {
+      return { name, value };
+    }
+  }
+
+  for (const name of LOGIN_STATE_COOKIES) {
+    const value = readCookie(name);
+    if (value) {
+      return { name: "login_state", value };
+    }
+  }
+
+  return null;
+}
+
+function returnUrl(theme: ThemeId, section: NavSection): string {
+  const url = new URL(window.location.href);
+  url.searchParams.set("theme", theme);
+  url.searchParams.delete("return_to");
+  url.searchParams.delete("code");
+  url.searchParams.delete("session_state");
+  url.searchParams.delete("iss");
+  url.searchParams.delete("error");
+  url.searchParams.delete("error_description");
+
+  if (section === "overview") {
+    url.searchParams.delete(SECTION_PARAM);
+  } else {
+    url.searchParams.set(SECTION_PARAM, section);
+  }
+
+  return url.toString();
 }
 
 function withThemeParam(href: string, theme: ThemeId): string {
@@ -211,14 +301,23 @@ function withThemeParam(href: string, theme: ThemeId): string {
   }
 }
 
-function loginHref(theme: ThemeId): string {
+function loginHref(theme: ThemeId, section: NavSection, loginState: LoginState | null): string {
   try {
-    const url = new URL("https://auth.schnick-schnack.info");
-    url.searchParams.set("theme", theme);
-    url.searchParams.set("return_to", window.location.href);
+    const url = new URL(KEYCLOAK_AUTH_URL);
+    url.searchParams.set("client_id", KEYCLOAK_CLIENT_ID);
+    url.searchParams.set("redirect_uri", returnUrl(theme, section));
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("scope", "openid");
+    url.searchParams.set("code_challenge", KEYCLOAK_CODE_CHALLENGE);
+    url.searchParams.set("code_challenge_method", "S256");
+
+    if (loginState) {
+      url.searchParams.set("state", loginState.value);
+    }
+
     return url.toString();
   } catch {
-    return "https://auth.schnick-schnack.info";
+    return KEYCLOAK_AUTH_URL;
   }
 }
 
@@ -259,6 +358,24 @@ function formatDate(value: string): string {
   }).format(date);
 }
 
+function formatDateTime(value: string | null | undefined): string {
+  if (!value) {
+    return "n/a";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "n/a";
+  }
+
+  return new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}
+
 function metricValue(metric: ServiceMetric): string {
   return `${String(metric.value)}${metric.unit ? ` ${metric.unit}` : ""}`;
 }
@@ -278,6 +395,14 @@ function rowTone(service: PublicService): RowTone {
 
   if (service.icon === "slack") {
     return "violet";
+  }
+
+  if (service.icon === "brain") {
+    return "violet";
+  }
+
+  if (service.icon === "file-text") {
+    return "blue";
   }
 
   if (service.icon === "gitlab") {
@@ -440,6 +565,39 @@ function useServiceInfo(): ServiceInfoSnapshot | null {
   return snapshot;
 }
 
+function useBuildInfo(): BuildInfo | null {
+  const [buildInfo, setBuildInfo] = useState<BuildInfo | null>(null);
+
+  useEffect(() => {
+    let closed = false;
+
+    async function loadBuildInfo() {
+      try {
+        const response = await fetch("/api/build-info", { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error("Build info unavailable");
+        }
+        const data = (await response.json()) as BuildInfo;
+        if (!closed) {
+          setBuildInfo(data);
+        }
+      } catch {
+        if (!closed) {
+          setBuildInfo(null);
+        }
+      }
+    }
+
+    void loadBuildInfo();
+
+    return () => {
+      closed = true;
+    };
+  }, []);
+
+  return buildInfo;
+}
+
 function useIsMobile(): boolean {
   const [isMobile, setIsMobile] = useState(() => window.matchMedia("(max-width: 900px)").matches);
 
@@ -504,11 +662,13 @@ function ThemeToggle({
 function Sidebar({
   activeSection,
   activeTheme,
+  loginState,
   onSectionChange,
   onThemeChange
 }: {
   activeSection: NavSection;
   activeTheme: ThemeId;
+  loginState: LoginState | null;
   onSectionChange: (section: NavSection) => void;
   onThemeChange: (theme: ThemeId) => void;
 }) {
@@ -550,7 +710,7 @@ function Sidebar({
 
       <div className="sidebar-bottom">
         <ThemeToggle activeTheme={activeTheme} onThemeChange={onThemeChange} />
-        <a className="login-secondary" href={loginHref(activeTheme)}>
+        <a className="login-secondary" href={loginHref(activeTheme, activeSection, loginState)}>
           Anmelden
         </a>
         <span className="secure-note">Sicher & verschlüsselt</span>
@@ -603,12 +763,16 @@ function VoiceWave() {
 }
 
 function TopBar({
+  activeSection,
   activeTheme,
+  loginState,
   onlineCount,
   serviceCount,
   onStatusClick
 }: {
+  activeSection: NavSection;
   activeTheme: ThemeId;
+  loginState: LoginState | null;
   onlineCount: number;
   serviceCount: number;
   onStatusClick: () => void;
@@ -623,7 +787,7 @@ function TopBar({
         <SlidersHorizontal size={17} aria-hidden="true" />
         Status ansehen
       </button>
-      <a className="login-primary" href={loginHref(activeTheme)}>
+      <a className="login-primary" href={loginHref(activeTheme, activeSection, loginState)}>
         <UserRound size={19} aria-hidden="true" />
         Anmelden
       </a>
@@ -694,7 +858,7 @@ function SystemRow({
           <ArrowUpRight size={17} aria-hidden="true" />
         </a>
       ) : (
-        <span className="open-link open-link--disabled">Geplant</span>
+        <span className="open-link open-link--disabled">{service.unavailableActionLabel ?? "Geplant"}</span>
       )}
     </article>
   );
@@ -928,10 +1092,12 @@ function PageHeader({
 }
 
 function OverviewMetrics({
+  buildInfo,
   feed,
   serviceInfo,
   snapshot
 }: {
+  buildInfo: BuildInfo | null;
   feed: ServiceFeed | undefined;
   serviceInfo: ServiceInfoSnapshot | null;
   snapshot: HealthSnapshot | null;
@@ -949,6 +1115,7 @@ function OverviewMetrics({
       <div><strong>{averageResponseMs !== null ? `${averageResponseMs} ms` : "n/a"}</strong><span>Ø Antwort</span></div>
       <div><strong>{infoAvailable}/{infoServices.length || services.length || 0}</strong><span>Info APIs</span></div>
       <div><strong>{feed?.items.length ?? 0}</strong><span>Chat-Nachrichten</span></div>
+      <div className="overview-metrics__build"><strong>{formatDateTime(buildInfo?.builtAt)}</strong><span>Letzter Build</span></div>
     </section>
   );
 }
@@ -1060,6 +1227,7 @@ function SystemDetailCard({
 }
 
 function OverviewView({
+  buildInfo,
   feed,
   serviceInfo,
   serviceInfoById,
@@ -1069,6 +1237,7 @@ function OverviewView({
   updates,
   onShowSystems
 }: {
+  buildInfo: BuildInfo | null;
   feed: ServiceFeed | undefined;
   serviceInfo: ServiceInfoSnapshot | null;
   serviceInfoById: Map<string, ServiceInfoResult>;
@@ -1081,7 +1250,7 @@ function OverviewView({
   return (
     <div className="page-view">
       <PageHeader eyebrow="Cockpit" title="Übersicht" />
-      <OverviewMetrics feed={feed} serviceInfo={serviceInfo} snapshot={snapshot} />
+      <OverviewMetrics buildInfo={buildInfo} feed={feed} serviceInfo={serviceInfo} snapshot={snapshot} />
       <SystemsPanel
         services={services}
         serviceInfoById={serviceInfoById}
@@ -1256,6 +1425,7 @@ function NewsView({ updates }: { updates: ReturnType<typeof publicUpdates> }) {
 
 function ActivePage({
   activeSection,
+  buildInfo,
   feed,
   serviceHref,
   serviceInfo,
@@ -1267,6 +1437,7 @@ function ActivePage({
   onShowSystems
 }: {
   activeSection: NavSection;
+  buildInfo: BuildInfo | null;
   feed: ServiceFeed | undefined;
   serviceHref: string | null;
   serviceInfo: ServiceInfoSnapshot | null;
@@ -1291,6 +1462,7 @@ function ActivePage({
       return (
         <OverviewView
           feed={feed}
+          buildInfo={buildInfo}
           serviceInfo={serviceInfo}
           serviceInfoById={serviceInfoById}
           services={services}
@@ -1304,6 +1476,7 @@ function ActivePage({
 }
 
 function MobilePage({
+  buildInfo,
   feed,
   serviceHref,
   serviceInfo,
@@ -1314,6 +1487,7 @@ function MobilePage({
   updates,
   onShowSystems
 }: {
+  buildInfo: BuildInfo | null;
   feed: ServiceFeed | undefined;
   serviceHref: string | null;
   serviceInfo: ServiceInfoSnapshot | null;
@@ -1326,7 +1500,7 @@ function MobilePage({
 }) {
   return (
     <div className="page-view page-view--mobile">
-      <OverviewMetrics feed={feed} serviceInfo={serviceInfo} snapshot={snapshot} />
+      <OverviewMetrics buildInfo={buildInfo} feed={feed} serviceInfo={serviceInfo} snapshot={snapshot} />
       <SystemsPanel services={services} serviceInfoById={serviceInfoById} theme={theme} onShowAll={onShowSystems} />
       <GlobalChat feed={feed} serviceHref={serviceHref} theme={theme} />
       <SystemStatusPanel serviceInfo={serviceInfo} snapshot={snapshot} />
@@ -1337,15 +1511,16 @@ function MobilePage({
 
 function App() {
   const { snapshot, socketState } = useHealth();
+  const buildInfo = useBuildInfo();
   const serviceInfo = useServiceInfo();
   const isMobile = useIsMobile();
   const [activeTheme, setActiveTheme] = useState<ThemeId>(() => applyInitialTheme());
-  const [activeSection, setActiveSection] = useState<NavSection>("overview");
+  const [activeSection, setActiveSection] = useState<NavSection>(() => initialSection());
+  const [loginState] = useState<LoginState | null>(() => readLoginState());
 
   const services = snapshot?.services ?? [];
   const activeServices = services.filter((service) => service.state !== "planned");
-  const plannedServices = services.filter((service) => service.state === "planned");
-  const visibleServices = [...activeServices, ...plannedServices];
+  const visibleServices = services;
   const serviceInfoById = useMemo(
     () => new Map((serviceInfo?.services ?? []).map((service) => [service.serviceId, service])),
     [serviceInfo]
@@ -1359,6 +1534,7 @@ function App() {
     const update = () => {
       setActiveTheme(theme);
       applyTheme(theme);
+      window.history.replaceState(null, "", returnUrl(theme, activeSection));
     };
 
     const viewTransitionDocument = document as ViewTransitionDocument;
@@ -1372,6 +1548,7 @@ function App() {
 
   function selectSection(section: NavSection) {
     setActiveSection(section);
+    window.history.replaceState(null, "", returnUrl(activeTheme, section));
   }
 
   useEffect(() => {
@@ -1396,19 +1573,23 @@ function App() {
       <Sidebar
         activeSection={activeSection}
         activeTheme={activeTheme}
+        loginState={loginState}
         onSectionChange={selectSection}
         onThemeChange={changeTheme}
       />
 
       <main className="voice-main">
         <TopBar
+          activeSection={activeSection}
           activeTheme={activeTheme}
+          loginState={loginState}
           onlineCount={onlineCount}
           serviceCount={activeServices.length || visibleServices.length}
           onStatusClick={() => selectSection("status")}
         />
         {isMobile ? (
           <MobilePage
+            buildInfo={buildInfo}
             feed={slackFeed}
             serviceHref={slackService?.href ?? null}
             serviceInfo={serviceInfo}
@@ -1422,6 +1603,7 @@ function App() {
         ) : (
           <ActivePage
             activeSection={activeSection}
+            buildInfo={buildInfo}
             feed={slackFeed}
             serviceHref={slackService?.href ?? null}
             serviceInfo={serviceInfo}
