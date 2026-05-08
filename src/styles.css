@@ -441,6 +441,7 @@ html[data-theme="light"] .openvoice-shell {
 .page-view {
   display: grid;
   align-content: start;
+  grid-auto-rows: max-content;
   gap: 14px;
   min-height: 0;
   overflow: auto;
@@ -570,10 +571,16 @@ html[data-theme="light"] .page-header {
 .systems-panel,
 .news-panel {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto;
   gap: 9px;
   padding: 12px 20px;
   overflow: hidden;
+}
+
+.systems-panel {
+  align-self: start;
+  height: max-content;
+  min-height: max-content;
 }
 
 .section-heading {
@@ -601,7 +608,7 @@ html[data-theme="light"] .page-header {
   align-content: start;
   gap: 7px;
   min-height: 0;
-  overflow: auto;
+  overflow: visible;
   padding-right: 2px;
   scrollbar-width: thin;
 }
@@ -987,7 +994,7 @@ html[data-theme="light"] .page-header {
 
 .voice-rail {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) 264px;
+  grid-template-rows: minmax(0, 1fr) 296px;
   gap: 14px;
   min-width: 0;
   min-height: 0;
@@ -1467,7 +1474,7 @@ html[data-theme="light"] .page-header {
   }
 
   .voice-rail {
-    grid-template-rows: minmax(0, 1fr) 238px;
+    grid-template-rows: minmax(0, 1fr) 296px;
     gap: 12px;
     padding-top: 82px;
     padding-bottom: 16px;
