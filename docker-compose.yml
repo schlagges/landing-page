@@ -28,6 +28,14 @@ services:
       INFO_GITLAB_URL: ${INFO_GITLAB_URL:-https://labs.schnick-schnack.info/.well-known/schnick-schnack/service-info.json}
       INFO_SCHNACK_TO_TEXT_URL: ${INFO_SCHNACK_TO_TEXT_URL:-}
       INFO_LLM_HUB_URL: ${INFO_LLM_HUB_URL:-}
+      GITLAB_BASE_URL: ${GITLAB_BASE_URL:-https://labs.schnick-schnack.info}
+      GITLAB_GROUP_PATH: ${GITLAB_GROUP_PATH:-schnick-schnack}
+      GITLAB_TOKEN: ${GITLAB_TOKEN:-}
+      GITLAB_ACCESS_TOKEN: ${GITLAB_ACCESS_TOKEN:-}
+      GLAB_TOKEN: ${GLAB_TOKEN:-}
+      GITLAB_UPDATES_LOOKBACK_HOURS: ${GITLAB_UPDATES_LOOKBACK_HOURS:-48}
+      GITLAB_UPDATES_CACHE_MS: ${GITLAB_UPDATES_CACHE_MS:-300000}
+      GITLAB_UPDATES_LIMIT: ${GITLAB_UPDATES_LIMIT:-80}
       ROCKET_CHAT_URL: ${ROCKET_CHAT_URL:-http://127.0.0.1:3010/}
       ROCKET_CHAT_CHANNEL: ${ROCKET_CHAT_CHANNEL:-landing-feed}
       ROCKET_CHAT_CHANNEL_URL: ${ROCKET_CHAT_CHANNEL_URL:-https://chat.schnick-schnack.info/channel/landing-feed}
