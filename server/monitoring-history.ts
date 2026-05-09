@@ -1,5 +1,7 @@
 import type { Database } from "./db.js";
 
+const DEFAULT_MONITORING_HISTORY_LIMIT_PER_SERVICE = 720;
+
 type ServiceState = "online" | "degraded" | "offline" | "checking" | "planned";
 
 export type MonitoringSampleInput = {
@@ -40,13 +42,33 @@ function mapSample(row: MonitoringSampleRow): MonitoringSample {
   };
 }
 
+export function monitoringHistoryLimitPerService(): number {
+  const configured = Number.parseInt(process.env.MONITORING_HISTORY_LIMIT_PER_SERVICE ?? "", 10);
+  if (!Number.isFinite(configured) || configured < 1) {
+    return DEFAULT_MONITORING_HISTORY_LIMIT_PER_SERVICE;
+  }
+  return configured;
+}
+
 export function insertMonitoringSamples(db: Database, samples: MonitoringSampleInput[]): void {
-  const statement = db.prepare(
+  const insertStatement = db.prepare(
     "INSERT INTO monitoring_samples (service_id, state, message, response_ms, checked_at) VALUES (?, ?, ?, ?, ?)"
   );
+  const pruneStatement = db.prepare(
+    `DELETE FROM monitoring_samples
+     WHERE service_id = ?
+       AND id NOT IN (
+         SELECT id FROM monitoring_samples
+         WHERE service_id = ?
+         ORDER BY checked_at DESC, id DESC
+         LIMIT ?
+       )`
+  );
+  const retentionLimit = monitoringHistoryLimitPerService();
 
   for (const sample of samples) {
-    statement.run(sample.serviceId, sample.state, sample.message, sample.responseMs, sample.checkedAt);
+    insertStatement.run(sample.serviceId, sample.state, sample.message, sample.responseMs, sample.checkedAt);
+    pruneStatement.run(sample.serviceId, sample.serviceId, retentionLimit);
   }
 }
 
@@ -54,7 +76,7 @@ export function monitoringHistory(db: Database, serviceIds: string[], limitPerSe
   const statement = db.prepare(
     `SELECT * FROM monitoring_samples
      WHERE service_id = ?
-     ORDER BY checked_at DESC
+     ORDER BY checked_at DESC, id DESC
      LIMIT ?`
   );
 

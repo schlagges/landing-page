@@ -939,16 +939,20 @@ async function refreshHealth(): Promise<HealthSnapshot> {
     overall: deriveOverall(services),
     services
   };
-  insertMonitoringSamples(
-    db,
-    services.map((service) => ({
-      serviceId: service.id,
-      state: service.state,
-      message: service.message,
-      responseMs: service.responseMs,
-      checkedAt: service.updatedAt ?? latestSnapshot.generatedAt
-    }))
-  );
+  try {
+    insertMonitoringSamples(
+      db,
+      services.map((service) => ({
+        serviceId: service.id,
+        state: service.state,
+        message: service.message,
+        responseMs: service.responseMs,
+        checkedAt: service.updatedAt ?? latestSnapshot.generatedAt
+      }))
+    );
+  } catch (error) {
+    console.error("Failed to persist monitoring samples.", error);
+  }
   return latestSnapshot;
 }
 

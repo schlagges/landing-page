@@ -100,6 +100,7 @@ test("monitoring history contains service trend samples", async ({ page }) => {
   const voice = body.services.find((service: { serviceId: string }) => service.serviceId === "voice");
   expect(voice).toBeTruthy();
   expect(Array.isArray(voice.samples)).toBe(true);
+  expect(Array.isArray(voice.incidents)).toBe(true);
   expect(voice.samples.length).toBeGreaterThan(0);
   expect(voice.samples[0]).toEqual(
     expect.objectContaining({
