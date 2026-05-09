@@ -38,15 +38,17 @@ type UserAccess = {
 };
 
 type RoleRequest = {
-  id: string;
+  id?: string;
   serviceId: string;
   serviceName: string;
+  requiredRole?: string;
   role: string;
-  state: "requested" | "approved" | "rejected";
-  requester: string;
-  source: string;
-  createdAt: string;
-  updatedAt: string;
+  status?: "requested" | "approved" | "rejected";
+  state?: "requested" | "approved" | "rejected";
+  requester?: string;
+  source?: string;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 type RoleRequestSnapshot = {
@@ -455,7 +457,12 @@ function requesterLabel(loginState: LoginState | null): string {
 }
 
 function requestedRoleFor(service: PublicService, requests: RoleRequest[]): RoleRequest | undefined {
-  return requests.find((request) => request.serviceId === service.id && request.role === service.requiredRole && request.state === "requested");
+  return requests.find(
+    (request) =>
+      request.serviceId === service.id &&
+      (request.requiredRole ?? request.role) === service.requiredRole &&
+      (request.status ?? request.state) === "requested"
+  );
 }
 
 function formatTime(value: string | null): string {
@@ -764,7 +771,14 @@ function useRoleRequests() {
 
       const data = (await response.json()) as { request?: RoleRequest };
       if (data.request) {
-        setRequests((current) => [data.request!, ...current.filter((item) => item.id !== data.request!.id)]);
+        setRequests((current) => [
+          data.request!,
+          ...current.filter(
+            (item) =>
+              item.id !== data.request!.id &&
+              !(item.serviceId === data.request!.serviceId && (item.requiredRole ?? item.role) === (data.request!.requiredRole ?? data.request!.role))
+          )
+        ]);
       } else {
         await loadRequests();
       }

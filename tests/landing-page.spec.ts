@@ -341,6 +341,20 @@ test("role requests can be created and reviewed through sqlite APIs", async ({ p
   expect(duplicated.request.status).toBe("requested");
   expect(duplicated.request.reason).toBe("Ich brauche Transkription für Projektmeetings.");
 
+  const pendingPublicList = await page.request.get("/api/role-requests");
+  expect(pendingPublicList.ok()).toBe(true);
+  const pendingPublicBody = await pendingPublicList.json();
+  const publicPendingRequest = pendingPublicBody.requests.find(
+    (request: { serviceId: string; role: string }) => request.serviceId === "schnack-to-text" && request.role === "schnack-to-text"
+  );
+  expect(publicPendingRequest).toBeTruthy();
+  expect(publicPendingRequest).not.toHaveProperty("id");
+  expect(publicPendingRequest).not.toHaveProperty("requester");
+  expect(publicPendingRequest).not.toHaveProperty("source");
+  expect(publicPendingRequest).not.toHaveProperty("reason");
+  expect(publicPendingRequest).not.toHaveProperty("reviewer");
+  expect(publicPendingRequest).not.toHaveProperty("reviewedAt");
+
   const mine = await page.request.get("/api/role-requests/me", {
     headers: { "x-schnick-schnack-user": "boris" }
   });
@@ -396,10 +410,13 @@ test("role requests can be created and reviewed through sqlite APIs", async ({ p
   const publicList = await page.request.get("/api/role-requests");
   expect(publicList.ok()).toBe(true);
   const publicBody = await publicList.json();
-  expect(publicBody.requests.some((request: { id: string }) => request.id === created.request.id)).toBe(false);
-  expect(publicBody.requests.some((request: { id: string }) => request.id === rejectCreated.request.id)).toBe(false);
+  expect(publicBody.requests.some((request: { serviceId: string }) => request.serviceId === "schnack-to-text")).toBe(false);
+  expect(publicBody.requests.some((request: { serviceId: string }) => request.serviceId === "gitlab")).toBe(false);
   for (const request of publicBody.requests as Array<Record<string, unknown>>) {
     expect(request.state).toBe("requested");
+    expect(request).not.toHaveProperty("id");
+    expect(request).not.toHaveProperty("requester");
+    expect(request).not.toHaveProperty("source");
     expect(request).not.toHaveProperty("reason");
     expect(request).not.toHaveProperty("reviewer");
     expect(request).not.toHaveProperty("reviewedAt");

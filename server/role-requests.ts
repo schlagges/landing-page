@@ -21,7 +21,7 @@ export type RoleRequestRecord = {
 
 export type PublicRoleRequestRecord = Pick<
   RoleRequestRecord,
-  "id" | "serviceId" | "serviceName" | "role" | "state" | "requester" | "source" | "createdAt" | "updatedAt"
+  "serviceId" | "serviceName" | "requiredRole" | "role" | "status" | "state" | "createdAt" | "updatedAt"
 >;
 
 type RoleRequestRow = {
@@ -70,13 +70,12 @@ function mapRoleRequest(row: RoleRequestRow): RoleRequestRecord {
 
 function mapPublicRoleRequest(row: RoleRequestRow): PublicRoleRequestRecord {
   return {
-    id: row.id,
     serviceId: row.service_id,
     serviceName: row.service_name,
+    requiredRole: row.required_role,
     role: row.required_role,
+    status: row.status,
     state: row.status,
-    requester: row.requester,
-    source: row.source,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
