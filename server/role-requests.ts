@@ -97,10 +97,10 @@ export function createRoleRequest(
     `INSERT OR REPLACE INTO role_requests (
       id, service_id, service_name, required_role, requester, reason, status, reviewer, source, created_at, updated_at, reviewed_at
     ) VALUES (?, ?, ?, ?, ?, ?, 'requested', NULL, ?, ?, ?, NULL)`
-  ).run(id, service.id, service.name, service.requiredRole, requester, reason, source, existing?.created_at ?? now, now);
+  ).run(id, service.id, service.name, service.requiredRole, requester, reason, source, now, now);
 
   const row = db.prepare("SELECT * FROM role_requests WHERE id = ?").get(id) as RoleRequestRow;
-  return { request: mapRoleRequest(row), created: !existing };
+  return { request: mapRoleRequest(row), created: true };
 }
 
 export function reviewRoleRequest(

@@ -14,7 +14,7 @@ export default defineConfig({
     trace: "retain-on-failure"
   },
   webServer: {
-    command: `PORT=${port} npm start`,
+    command: `PORT=${port} SQLITE_DB_PATH=test-results/landing-page.sqlite npm start`,
     reuseExistingServer: !process.env.CI,
     timeout: 15000,
     url: baseURL

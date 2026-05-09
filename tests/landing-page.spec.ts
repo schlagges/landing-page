@@ -340,6 +340,17 @@ test("role requests can be created and reviewed through sqlite APIs", async ({ p
   expect(approve.ok()).toBe(true);
   expect((await approve.json()).request.status).toBe("approved");
 
+  const reopen = await page.request.post("/api/role-requests", {
+    data: {
+      serviceId: "schnack-to-text",
+      reason: "Ich brauche wieder Transkription.",
+      source: "playwright"
+    },
+    headers: { "x-schnick-schnack-user": "boris" }
+  });
+  expect(reopen.status()).toBe(201);
+  expect((await reopen.json()).request.status).toBe("requested");
+
   const rejectCreate = await page.request.post("/api/role-requests", {
     data: { serviceId: "gitlab", reason: "Code lesen.", source: "playwright" },
     headers: { "x-schnick-schnack-user": "boris" }
