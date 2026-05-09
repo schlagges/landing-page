@@ -1,6 +1,6 @@
 import express from "express";
 import { createServer } from "node:http";
-import { readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
@@ -150,6 +150,20 @@ type GitLabMergeRequest = {
   };
 };
 
+type RoleRequestState = "requested" | "approved" | "rejected";
+
+type RoleRequest = {
+  id: string;
+  serviceId: string;
+  serviceName: string;
+  role: string;
+  state: RoleRequestState;
+  requester: string;
+  source: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 const DEFAULT_TIMEOUT_MS = 4500;
 const INFO_TIMEOUT_MS = Number.parseInt(process.env.INFO_TIMEOUT_MS ?? "3500", 10);
 const HEALTH_INTERVAL_MS = Number.parseInt(process.env.HEALTH_INTERVAL_MS ?? "10000", 10);
@@ -170,6 +184,10 @@ const GITLAB_UPDATES_CACHE_MS = Math.max(
 const GITLAB_UPDATES_LIMIT = Math.min(100, Math.max(1, Number.parseInt(process.env.GITLAB_UPDATES_LIMIT ?? "80", 10) || 80));
 const ROCKET_CHAT_URL = process.env.ROCKET_CHAT_URL ?? "https://slack.schnick-schnack.info";
 const ROCKET_CHAT_CHANNEL = process.env.ROCKET_CHAT_CHANNEL ?? "landing-feed";
+const ROLE_REQUEST_CHANNEL = process.env.ROLE_REQUEST_CHANNEL ?? "keycloak-admins";
+const ROLE_REQUEST_CHANNEL_URL =
+  process.env.ROLE_REQUEST_CHANNEL_URL ?? `https://slack.schnick-schnack.info/channel/${ROLE_REQUEST_CHANNEL}`;
+const ROLE_REQUESTS_FILE = process.env.ROLE_REQUESTS_FILE ?? path.resolve("data", "role-requests.json");
 const ROCKET_CHAT_CHANNEL_URL =
   process.env.ROCKET_CHAT_CHANNEL_URL ?? `https://chat.schnick-schnack.info/channel/${ROCKET_CHAT_CHANNEL}`;
 const ROCKET_CHAT_MESSAGE_LIMIT = Math.min(
@@ -681,6 +699,95 @@ async function updateSnapshot(): Promise<UpdateSnapshot> {
   };
 }
 
+function readRoleRequests(): RoleRequest[] {
+  try {
+    if (!existsSync(ROLE_REQUESTS_FILE)) {
+      return [];
+    }
+
+    const data = JSON.parse(readFileSync(ROLE_REQUESTS_FILE, "utf8")) as unknown;
+    if (!Array.isArray(data)) {
+      return [];
+    }
+
+    return data.filter((item): item is RoleRequest => {
+      if (!item || typeof item !== "object") {
+        return false;
+      }
+
+      const request = item as Partial<RoleRequest>;
+      return (
+        typeof request.id === "string" &&
+        typeof request.serviceId === "string" &&
+        typeof request.serviceName === "string" &&
+        typeof request.role === "string" &&
+        request.state === "requested" &&
+        typeof request.requester === "string" &&
+        typeof request.source === "string" &&
+        typeof request.createdAt === "string" &&
+        typeof request.updatedAt === "string"
+      );
+    });
+  } catch {
+    return [];
+  }
+}
+
+function writeRoleRequests(requests: RoleRequest[]): void {
+  mkdirSync(path.dirname(ROLE_REQUESTS_FILE), { recursive: true });
+  writeFileSync(ROLE_REQUESTS_FILE, JSON.stringify(requests, null, 2), "utf8");
+}
+
+function roleRequestId(serviceId: string, role: string, requester: string): string {
+  return `${serviceId}:${role}:${requester}`.toLowerCase().replace(/[^a-z0-9:._-]+/g, "-").slice(0, 180);
+}
+
+function findService(serviceId: string): Pick<PublicService, "id" | "name" | "requiredRole"> | undefined {
+  return latestSnapshot.services.find((service) => service.id === serviceId) ?? targets.find((target) => target.id === serviceId);
+}
+
+function normalizeRequester(value: unknown): string {
+  if (typeof value !== "string") {
+    return "unbekannt";
+  }
+
+  return sanitizeUpdateText(value, "unbekannt").slice(0, 80);
+}
+
+async function postRoleRequestToRocketChat(request: RoleRequest): Promise<void> {
+  const userId = process.env.ROCKET_CHAT_USER_ID;
+  const authToken = process.env.ROCKET_CHAT_AUTH_TOKEN;
+
+  if (!userId || !authToken) {
+    return;
+  }
+
+  const url = new URL("/api/v1/chat.postMessage", ROCKET_CHAT_URL);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), INFO_TIMEOUT_MS);
+
+  try {
+    await fetch(url, {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+        "X-Auth-Token": authToken,
+        "X-User-Id": userId
+      },
+      body: JSON.stringify({
+        channel: `#${ROLE_REQUEST_CHANNEL}`,
+        text: `@alle Keycloak admins Rolle ${request.role} für ${request.serviceName} angefragt. Quelle: ${request.source}`
+      }),
+      signal: controller.signal
+    });
+  } catch {
+    // Persistence is the source of truth; chat notification is best effort.
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function fetchServiceInfo(target: HealthTarget): Promise<ServiceInfoResult> {
   if (!target.url) {
     return {
@@ -881,6 +988,7 @@ const server = createServer(app);
 const wss = new WebSocketServer({ server, path: "/ws/health" });
 
 app.disable("x-powered-by");
+app.use(express.json({ limit: "16kb" }));
 
 app.get("/api/health", (_request, response) => {
   response.json(latestSnapshot);
@@ -908,6 +1016,58 @@ app.get("/api/service-info/:serviceId", (request, response) => {
 
 app.get("/api/updates", async (_request, response) => {
   response.json(await updateSnapshot());
+});
+
+app.get("/api/role-requests", (_request, response) => {
+  response.json({
+    generatedAt: new Date().toISOString(),
+    channel: ROLE_REQUEST_CHANNEL_URL,
+    requests: readRoleRequests()
+  });
+});
+
+app.post("/api/role-requests", async (request, response) => {
+  const body = request.body as {
+    serviceId?: unknown;
+    requester?: unknown;
+    source?: unknown;
+  };
+  const serviceId = typeof body.serviceId === "string" ? body.serviceId.trim() : "";
+  const service = findService(serviceId);
+
+  if (!service?.requiredRole) {
+    response.status(400).json({ message: "Unknown protected service." });
+    return;
+  }
+
+  const requester = normalizeRequester(body.requester);
+  const source = typeof body.source === "string" ? sanitizeUpdateText(body.source, "landing-page").slice(0, 180) : "landing-page";
+  const now = new Date().toISOString();
+  const id = roleRequestId(service.id, service.requiredRole, requester);
+  const requests = readRoleRequests();
+  const existing = requests.find((item) => item.id === id && item.state === "requested");
+
+  if (existing) {
+    response.status(200).json({ request: existing, channel: ROLE_REQUEST_CHANNEL_URL });
+    return;
+  }
+
+  const roleRequest: RoleRequest = {
+    id,
+    serviceId: service.id,
+    serviceName: service.name,
+    role: service.requiredRole,
+    state: "requested",
+    requester,
+    source,
+    createdAt: now,
+    updatedAt: now
+  };
+
+  const nextRequests = [roleRequest, ...requests].slice(0, 200);
+  writeRoleRequests(nextRequests);
+  void postRoleRequestToRocketChat(roleRequest);
+  response.status(201).json({ request: roleRequest, channel: ROLE_REQUEST_CHANNEL_URL });
 });
 
 app.get("/api/design-preferences", (_request, response) => {

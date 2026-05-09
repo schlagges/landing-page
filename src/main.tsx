@@ -37,6 +37,24 @@ type UserAccess = {
   hasRoleInfo: boolean;
 };
 
+type RoleRequest = {
+  id: string;
+  serviceId: string;
+  serviceName: string;
+  role: string;
+  state: "requested" | "approved" | "rejected";
+  requester: string;
+  source: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type RoleRequestSnapshot = {
+  generatedAt: string;
+  channel: string;
+  requests: RoleRequest[];
+};
+
 type PublicService = {
   id: string;
   name: string;
@@ -154,8 +172,6 @@ const KEYCLOAK_AUTH_URL =
 const KEYCLOAK_CLIENT_ID = import.meta.env.VITE_KEYCLOAK_CLIENT_ID ?? "landing-page";
 const KEYCLOAK_CODE_CHALLENGE =
   import.meta.env.VITE_KEYCLOAK_CODE_CHALLENGE ?? "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
-const ROLE_REQUEST_URL =
-  import.meta.env.VITE_ROLE_REQUEST_URL ?? "https://slack.schnick-schnack.info/channel/keycloak-admins";
 const THEMES = [
   { id: "dark", label: "Dark" },
   { id: "light", label: "Light" }
@@ -434,14 +450,12 @@ function accessLabel(service: PublicService, access: UserAccess): string {
   return hasServiceRole(service, access) ? "Zugriff aktiv" : "Rolle fehlt";
 }
 
-function roleRequestHref(service: PublicService): string {
-  try {
-    const url = new URL(ROLE_REQUEST_URL);
-    url.searchParams.set("msg", `@alle Keycloak admins Bitte Rolle ${service.requiredRole ?? service.id} für ${service.name} freigeben.`);
-    return url.toString();
-  } catch {
-    return ROLE_REQUEST_URL;
-  }
+function requesterLabel(loginState: LoginState | null): string {
+  return loginState?.value ?? "landing-page-user";
+}
+
+function requestedRoleFor(service: PublicService, requests: RoleRequest[]): RoleRequest | undefined {
+  return requests.find((request) => request.serviceId === service.id && request.role === service.requiredRole && request.state === "requested");
 }
 
 function formatTime(value: string | null): string {
@@ -706,6 +720,66 @@ function usePublicUpdates(): PublicUpdate[] {
   return updates;
 }
 
+function useRoleRequests() {
+  const [requests, setRequests] = useState<RoleRequest[]>([]);
+  const [pendingServiceId, setPendingServiceId] = useState<string | null>(null);
+
+  async function loadRequests() {
+    try {
+      const response = await fetch("/api/role-requests", { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error("Role requests unavailable");
+      }
+      const data = (await response.json()) as RoleRequestSnapshot;
+      setRequests(Array.isArray(data.requests) ? data.requests : []);
+    } catch {
+      setRequests([]);
+    }
+  }
+
+  useEffect(() => {
+    void loadRequests();
+  }, []);
+
+  async function requestRole(service: PublicService, requester: string) {
+    if (!service.requiredRole) {
+      return;
+    }
+
+    setPendingServiceId(service.id);
+    try {
+      const response = await fetch("/api/role-requests", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          serviceId: service.id,
+          requester,
+          source: window.location.href
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Role request failed");
+      }
+
+      const data = (await response.json()) as { request?: RoleRequest };
+      if (data.request) {
+        setRequests((current) => [data.request!, ...current.filter((item) => item.id !== data.request!.id)]);
+      } else {
+        await loadRequests();
+      }
+    } finally {
+      setPendingServiceId(null);
+    }
+  }
+
+  return {
+    requests,
+    pendingServiceId,
+    requestRole
+  };
+}
+
 function useBuildInfo(): BuildInfo | null {
   const [buildInfo, setBuildInfo] = useState<BuildInfo | null>(null);
 
@@ -959,6 +1033,9 @@ function Sparkline({ points }: { points: number[] }) {
 function SystemRow({
   activeSection,
   loginState,
+  onRequestRole,
+  pendingRoleRequest,
+  roleRequests,
   service,
   serviceInfo,
   theme,
@@ -966,6 +1043,9 @@ function SystemRow({
 }: {
   activeSection: NavSection;
   loginState: LoginState | null;
+  onRequestRole: (service: PublicService) => void;
+  pendingRoleRequest: boolean;
+  roleRequests: RoleRequest[];
   service: PublicService;
   serviceInfo: ServiceInfoResult | undefined;
   theme: ThemeId;
@@ -976,6 +1056,7 @@ function SystemRow({
   const points = chartPoints(serviceInfo);
   const responseText = service.responseMs !== null ? `Antwort ${service.responseMs} ms` : service.message;
   const canOpen = Boolean(service.href) && hasServiceRole(service, userAccess);
+  const roleRequest = requestedRoleFor(service, roleRequests);
 
   return (
     <article className={`system-row system-row--${rowTone(service)}`} aria-label={`${service.name} System`}>
@@ -1004,10 +1085,12 @@ function SystemRow({
           Öffnen
           <ArrowUpRight size={17} aria-hidden="true" />
         </a>
+      ) : service.href && userAccess.hasRoleInfo && roleRequest ? (
+        <span className="open-link open-link--disabled">Rolle angefragt</span>
       ) : service.href && userAccess.hasRoleInfo ? (
-        <a className="open-link open-link--request" href={roleRequestHref(service)}>
-          Rolle anfragen
-        </a>
+        <button className="open-link open-link--request" disabled={pendingRoleRequest} onClick={() => onRequestRole(service)} type="button">
+          {pendingRoleRequest ? "Wird angefragt" : "Rolle anfragen"}
+        </button>
       ) : service.href ? (
         <a className="open-link" href={loginHref(theme, activeSection, loginState)}>
           Anmelden
@@ -1022,6 +1105,9 @@ function SystemRow({
 function SystemsPanel({
   activeSection,
   loginState,
+  onRequestRole,
+  pendingRoleRequestId,
+  roleRequests,
   services,
   serviceInfoById,
   theme,
@@ -1031,6 +1117,9 @@ function SystemsPanel({
 }: {
   activeSection: NavSection;
   loginState: LoginState | null;
+  onRequestRole: (service: PublicService) => void;
+  pendingRoleRequestId: string | null;
+  roleRequests: RoleRequest[];
   services: PublicService[];
   serviceInfoById: Map<string, ServiceInfoResult>;
   theme: ThemeId;
@@ -1051,6 +1140,9 @@ function SystemsPanel({
               key={service.id}
               activeSection={activeSection}
               loginState={loginState}
+              onRequestRole={onRequestRole}
+              pendingRoleRequest={pendingRoleRequestId === service.id}
+              roleRequests={roleRequests}
               service={service}
               serviceInfo={serviceInfoById.get(service.id)}
               theme={theme}
@@ -1323,6 +1415,9 @@ function ChartPreview({ chart }: { chart: ServiceChart }) {
 function SystemDetailCard({
   activeSection,
   loginState,
+  onRequestRole,
+  pendingRoleRequest,
+  roleRequests,
   service,
   serviceInfo,
   theme,
@@ -1330,6 +1425,9 @@ function SystemDetailCard({
 }: {
   activeSection: NavSection;
   loginState: LoginState | null;
+  onRequestRole: (service: PublicService) => void;
+  pendingRoleRequest: boolean;
+  roleRequests: RoleRequest[];
   service: PublicService;
   serviceInfo: ServiceInfoResult | undefined;
   theme: ThemeId;
@@ -1342,6 +1440,7 @@ function SystemDetailCard({
   const sections = data?.sections ?? [];
   const actions = data?.actions ?? [];
   const canOpen = hasServiceRole(service, userAccess);
+  const roleRequest = requestedRoleFor(service, roleRequests);
 
   return (
     <article className={`system-detail-card system-row--${rowTone(service)}`}>
@@ -1361,7 +1460,7 @@ function SystemDetailCard({
         <div><dt>Antwort</dt><dd>{service.responseMs !== null ? `${service.responseMs} ms` : "n/a"}</dd></div>
         <div><dt>Update</dt><dd>{formatTime(service.updatedAt)}</dd></div>
         <div><dt>Rolle</dt><dd>{service.requiredRole ?? "Öffentlich"}</dd></div>
-        <div><dt>Zugriff</dt><dd>{accessLabel(service, userAccess)}</dd></div>
+        <div><dt>Zugriff</dt><dd>{roleRequest ? "Rolle angefragt" : accessLabel(service, userAccess)}</dd></div>
       </dl>
 
       {metrics.length ? <MetricGrid metrics={metrics} /> : <p className="detail-empty">Keine öffentlichen Metriken geliefert.</p>}
@@ -1390,8 +1489,12 @@ function SystemDetailCard({
             Dienst öffnen
             <ArrowUpRight size={16} aria-hidden="true" />
           </a>
+        ) : service.href && userAccess.hasRoleInfo && roleRequest ? (
+          <span>Rolle angefragt</span>
         ) : service.href && userAccess.hasRoleInfo ? (
-          <a href={roleRequestHref(service)}>Rolle anfragen</a>
+          <button disabled={pendingRoleRequest} onClick={() => onRequestRole(service)} type="button">
+            {pendingRoleRequest ? "Wird angefragt" : "Rolle anfragen"}
+          </button>
         ) : service.href ? (
           <a href={loginHref(theme, activeSection, loginState)}>Anmelden</a>
         ) : (
@@ -1407,6 +1510,9 @@ function OverviewView({
   buildInfo,
   feed,
   loginState,
+  onRequestRole,
+  pendingRoleRequestId,
+  roleRequests,
   serviceInfo,
   serviceInfoById,
   services,
@@ -1420,6 +1526,9 @@ function OverviewView({
   buildInfo: BuildInfo | null;
   feed: ServiceFeed | undefined;
   loginState: LoginState | null;
+  onRequestRole: (service: PublicService) => void;
+  pendingRoleRequestId: string | null;
+  roleRequests: RoleRequest[];
   serviceInfo: ServiceInfoSnapshot | null;
   serviceInfoById: Map<string, ServiceInfoResult>;
   services: PublicService[];
@@ -1436,6 +1545,9 @@ function OverviewView({
       <SystemsPanel
         activeSection={activeSection}
         loginState={loginState}
+        onRequestRole={onRequestRole}
+        pendingRoleRequestId={pendingRoleRequestId}
+        roleRequests={roleRequests}
         services={services}
         serviceInfoById={serviceInfoById}
         theme={theme}
@@ -1451,6 +1563,9 @@ function OverviewView({
 function SystemsView({
   activeSection,
   loginState,
+  onRequestRole,
+  pendingRoleRequestId,
+  roleRequests,
   serviceInfoById,
   services,
   theme,
@@ -1458,6 +1573,9 @@ function SystemsView({
 }: {
   activeSection: NavSection;
   loginState: LoginState | null;
+  onRequestRole: (service: PublicService) => void;
+  pendingRoleRequestId: string | null;
+  roleRequests: RoleRequest[];
   serviceInfoById: Map<string, ServiceInfoResult>;
   services: PublicService[];
   theme: ThemeId;
@@ -1478,6 +1596,9 @@ function SystemsView({
                 key={service.id}
                 activeSection={activeSection}
                 loginState={loginState}
+                onRequestRole={onRequestRole}
+                pendingRoleRequest={pendingRoleRequestId === service.id}
+                roleRequests={roleRequests}
                 service={service}
                 serviceInfo={serviceInfoById.get(service.id)}
                 theme={theme}
@@ -1623,6 +1744,9 @@ function ActivePage({
   buildInfo,
   feed,
   loginState,
+  onRequestRole,
+  pendingRoleRequestId,
+  roleRequests,
   serviceHref,
   serviceInfo,
   serviceInfoById,
@@ -1637,6 +1761,9 @@ function ActivePage({
   buildInfo: BuildInfo | null;
   feed: ServiceFeed | undefined;
   loginState: LoginState | null;
+  onRequestRole: (service: PublicService) => void;
+  pendingRoleRequestId: string | null;
+  roleRequests: RoleRequest[];
   serviceHref: string | null;
   serviceInfo: ServiceInfoSnapshot | null;
   serviceInfoById: Map<string, ServiceInfoResult>;
@@ -1659,6 +1786,9 @@ function ActivePage({
         <SystemsView
           activeSection={activeSection}
           loginState={loginState}
+          onRequestRole={onRequestRole}
+          pendingRoleRequestId={pendingRoleRequestId}
+          roleRequests={roleRequests}
           serviceInfoById={serviceInfoById}
           services={services}
           theme={theme}
@@ -1673,6 +1803,9 @@ function ActivePage({
           feed={feed}
           buildInfo={buildInfo}
           loginState={loginState}
+          onRequestRole={onRequestRole}
+          pendingRoleRequestId={pendingRoleRequestId}
+          roleRequests={roleRequests}
           serviceInfo={serviceInfo}
           serviceInfoById={serviceInfoById}
           services={services}
@@ -1691,6 +1824,9 @@ function MobilePage({
   buildInfo,
   feed,
   loginState,
+  onRequestRole,
+  pendingRoleRequestId,
+  roleRequests,
   serviceHref,
   serviceInfo,
   serviceInfoById,
@@ -1705,6 +1841,9 @@ function MobilePage({
   buildInfo: BuildInfo | null;
   feed: ServiceFeed | undefined;
   loginState: LoginState | null;
+  onRequestRole: (service: PublicService) => void;
+  pendingRoleRequestId: string | null;
+  roleRequests: RoleRequest[];
   serviceHref: string | null;
   serviceInfo: ServiceInfoSnapshot | null;
   serviceInfoById: Map<string, ServiceInfoResult>;
@@ -1721,6 +1860,9 @@ function MobilePage({
       <SystemsPanel
         activeSection={activeSection}
         loginState={loginState}
+        onRequestRole={onRequestRole}
+        pendingRoleRequestId={pendingRoleRequestId}
+        roleRequests={roleRequests}
         services={services}
         serviceInfoById={serviceInfoById}
         theme={theme}
@@ -1739,6 +1881,7 @@ function App() {
   const buildInfo = useBuildInfo();
   const serviceInfo = useServiceInfo();
   const updates = usePublicUpdates();
+  const roleRequestState = useRoleRequests();
   const isMobile = useIsMobile();
   const [activeTheme, setActiveTheme] = useState<ThemeId>(() => applyInitialTheme());
   const [activeSection, setActiveSection] = useState<NavSection>(() => initialSection());
@@ -1755,6 +1898,10 @@ function App() {
   const slackService = visibleServices.find((service) => service.id === "slack");
   const slackFeed = serviceInfoById.get("slack")?.data?.feeds?.[0];
   const onlineCount = activeServices.filter((service) => service.state === "online").length;
+
+  function requestRole(service: PublicService) {
+    void roleRequestState.requestRole(service, requesterLabel(loginState));
+  }
 
   function changeTheme(theme: ThemeId) {
     const update = () => {
@@ -1819,6 +1966,9 @@ function App() {
             buildInfo={buildInfo}
             feed={slackFeed}
             loginState={loginState}
+            onRequestRole={requestRole}
+            pendingRoleRequestId={roleRequestState.pendingServiceId}
+            roleRequests={roleRequestState.requests}
             serviceHref={slackService?.href ?? null}
             serviceInfo={serviceInfo}
             serviceInfoById={serviceInfoById}
@@ -1835,6 +1985,9 @@ function App() {
             buildInfo={buildInfo}
             feed={slackFeed}
             loginState={loginState}
+            onRequestRole={requestRole}
+            pendingRoleRequestId={roleRequestState.pendingServiceId}
+            roleRequests={roleRequestState.requests}
             serviceHref={slackService?.href ?? null}
             serviceInfo={serviceInfo}
             serviceInfoById={serviceInfoById}

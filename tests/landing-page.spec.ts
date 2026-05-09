@@ -33,6 +33,11 @@ test("service info OpenAPI and aggregation endpoints are available", async ({ pa
   expect(typeof updates.generatedAt).toBe("string");
   expect(Array.isArray(updates.updates)).toBe(true);
 
+  const roleRequestsResponse = await page.request.get("/api/role-requests");
+  expect(roleRequestsResponse.ok()).toBe(true);
+  const roleRequests = await roleRequestsResponse.json();
+  expect(Array.isArray(roleRequests.requests)).toBe(true);
+
   const healthResponse = await page.request.get("/api/health");
   expect(healthResponse.ok()).toBe(true);
   const health = await healthResponse.json();
@@ -218,6 +223,41 @@ test("system rows keep public links and receive the active theme", async ({ page
 });
 
 test("module access shows missing-role request action", async ({ page }) => {
+  await page.route("**/api/role-requests", async (route) => {
+    if (route.request().method() === "POST") {
+      const body = route.request().postDataJSON() as { serviceId: string };
+      expect(body.serviceId).toBe("schnack-to-text");
+      await route.fulfill({
+        contentType: "application/json",
+        status: 201,
+        body: JSON.stringify({
+          channel: "https://slack.schnick-schnack.info/channel/keycloak-admins",
+          request: {
+            id: "schnack-to-text:schnack-to-text:landing-page-user",
+            serviceId: "schnack-to-text",
+            serviceName: "Schnack To Text",
+            role: "schnack-to-text",
+            state: "requested",
+            requester: "landing-page-user",
+            source: "test",
+            createdAt: "2026-05-09T00:00:00.000Z",
+            updatedAt: "2026-05-09T00:00:00.000Z"
+          }
+        })
+      });
+      return;
+    }
+
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        generatedAt: "2026-05-09T00:00:00.000Z",
+        channel: "https://slack.schnick-schnack.info/channel/keycloak-admins",
+        requests: []
+      })
+    });
+  });
+
   await page.goto("/?roles=voice");
 
   const voice = page.getByLabel("Voice System");
@@ -226,10 +266,8 @@ test("module access shows missing-role request action", async ({ page }) => {
 
   const schnackToText = page.getByLabel("Schnack To Text System");
   await expect(schnackToText.getByText("Rolle fehlt", { exact: true })).toBeVisible();
-  await expect(schnackToText.getByRole("link", { name: "Rolle anfragen" })).toHaveAttribute(
-    "href",
-    /keycloak-admins.*schnack-to-text/
-  );
+  await schnackToText.getByRole("button", { name: "Rolle anfragen" }).click();
+  await expect(schnackToText.getByText("Rolle angefragt", { exact: true })).toBeVisible();
 });
 
 test("global chat and system status remain persistent dashboard areas", async ({ page }) => {

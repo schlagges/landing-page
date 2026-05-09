@@ -36,9 +36,14 @@ services:
       GITLAB_UPDATES_LOOKBACK_HOURS: ${GITLAB_UPDATES_LOOKBACK_HOURS:-48}
       GITLAB_UPDATES_CACHE_MS: ${GITLAB_UPDATES_CACHE_MS:-300000}
       GITLAB_UPDATES_LIMIT: ${GITLAB_UPDATES_LIMIT:-80}
+      ROLE_REQUEST_CHANNEL: ${ROLE_REQUEST_CHANNEL:-keycloak-admins}
+      ROLE_REQUEST_CHANNEL_URL: ${ROLE_REQUEST_CHANNEL_URL:-https://slack.schnick-schnack.info/channel/keycloak-admins}
+      ROLE_REQUESTS_FILE: ${ROLE_REQUESTS_FILE:-/app/data/role-requests.json}
       ROCKET_CHAT_URL: ${ROCKET_CHAT_URL:-http://127.0.0.1:3010/}
       ROCKET_CHAT_CHANNEL: ${ROCKET_CHAT_CHANNEL:-landing-feed}
       ROCKET_CHAT_CHANNEL_URL: ${ROCKET_CHAT_CHANNEL_URL:-https://chat.schnick-schnack.info/channel/landing-feed}
       ROCKET_CHAT_MESSAGE_LIMIT: ${ROCKET_CHAT_MESSAGE_LIMIT:-5}
       ROCKET_CHAT_USER_ID: ${ROCKET_CHAT_USER_ID:-}
       ROCKET_CHAT_AUTH_TOKEN: ${ROCKET_CHAT_AUTH_TOKEN:-}
+    volumes:
+      - ./data:/app/data
