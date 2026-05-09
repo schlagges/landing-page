@@ -659,6 +659,30 @@ html[data-theme="light"] .page-header {
   grid-column: 1 / -1;
 }
 
+.request-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: end;
+}
+
+.request-actions button {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--panel-strong);
+  cursor: pointer;
+}
+
+.request-actions button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
 .history-row strong,
 .request-row strong,
 .news-row strong {

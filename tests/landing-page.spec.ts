@@ -151,17 +151,65 @@ test("admin role request endpoint requires an admin role", async ({ page }) => {
 
 test("admin area is hidden without admin role and visible with admin role", async ({ page }) => {
   let adminRoleRequestCalls = 0;
+  let approveCalls = 0;
   let moduleNewsCalls = 0;
   let monitoringHistoryCalls = 0;
   let adminRoleHeaders: Record<string, string> | null = null;
+  let approveHeaders: Record<string, string> | null = null;
 
   await page.route("**/api/admin/role-requests", async (route) => {
     adminRoleRequestCalls += 1;
     adminRoleHeaders = route.request().headers();
     await route.fulfill({
       contentType: "application/json",
-      status: 403,
-      json: { message: "Admin role required." }
+      status: 200,
+      json: {
+        generatedAt: "2026-05-09T00:00:00.000Z",
+        requests: [
+          {
+            id: "ui-request",
+            serviceId: "gitlab",
+            serviceName: "GitLab",
+            role: "gitlab",
+            requiredRole: "gitlab",
+            status: "requested",
+            state: "requested",
+            requester: "boris",
+            reason: "",
+            source: "landing-page",
+            createdAt: "2026-05-09T00:00:00.000Z",
+            updatedAt: "2026-05-09T00:00:00.000Z",
+            reviewer: null,
+            reviewedAt: null
+          }
+        ]
+      }
+    });
+  });
+  await page.route("**/api/admin/role-requests/ui-request/approve", async (route) => {
+    approveCalls += 1;
+    approveHeaders = route.request().headers();
+    await route.fulfill({
+      contentType: "application/json",
+      status: 200,
+      json: {
+        request: {
+          id: "ui-request",
+          serviceId: "gitlab",
+          serviceName: "GitLab",
+          role: "gitlab",
+          requiredRole: "gitlab",
+          status: "approved",
+          state: "approved",
+          requester: "boris",
+          reason: "",
+          source: "landing-page",
+          createdAt: "2026-05-09T00:00:00.000Z",
+          updatedAt: "2026-05-09T00:00:01.000Z",
+          reviewer: "admin",
+          reviewedAt: "2026-05-09T00:00:01.000Z"
+        }
+      }
     });
   });
   await page.route("**/api/module-news", async (route) => {
@@ -185,14 +233,19 @@ test("admin area is hidden without admin role and visible with admin role", asyn
   await page.getByRole("button", { name: "Admin", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Adminbereich" })).toBeVisible();
   await expect(page.getByText("Berechtigungsanfragen")).toBeVisible();
-  await expect(page.getByText("Admin-Daten nicht freigegeben")).toBeVisible();
+  await expect(page.getByText("boris")).toBeVisible();
+  await page.getByRole("button", { name: "GitLab genehmigen" }).click();
+  await expect(page.getByText("Genehmigt")).toBeVisible();
   await expect(page.getByText("Monitoring-Verlauf")).toBeVisible();
   await expect(page.getByText("Modulnews")).toBeVisible();
   await expect.poll(() => adminRoleRequestCalls).toBe(1);
+  await expect.poll(() => approveCalls).toBe(1);
   expect(adminRoleHeaders?.["x-schnick-schnack-roles"]).toBeUndefined();
   expect(adminRoleHeaders?.["x-forwarded-roles"]).toBeUndefined();
   expect(adminRoleHeaders?.["x-schnick-schnack-user"]).toBeUndefined();
   expect(adminRoleHeaders?.["x-forwarded-user"]).toBeUndefined();
+  expect(approveHeaders?.["x-schnick-schnack-roles"]).toBeUndefined();
+  expect(approveHeaders?.["x-schnick-schnack-user"]).toBeUndefined();
   expect(moduleNewsCalls).toBeGreaterThan(0);
   expect(monitoringHistoryCalls).toBeGreaterThan(0);
 });
@@ -560,6 +613,7 @@ test("module access shows missing-role request action", async ({ page }) => {
       const body = route.request().postDataJSON() as { serviceId: string; reason?: string };
       expect(body.serviceId).toBe("schnack-to-text");
       expect(body.reason ?? "").toBe("");
+      expect(body).not.toHaveProperty("source");
       await route.fulfill({
         contentType: "application/json",
         status: 201,
@@ -659,23 +713,32 @@ test("role requests can be created and reviewed through sqlite APIs", async ({ p
   expect(trustedMineRequest.reason).toBe("Ich brauche Transkription für Projektmeetings.");
   expect(trustedMineRequest.requester).toBe("boris");
 
-  const publicCreate = await page.request.post("/api/role-requests", {
+  const unauthenticatedCreate = await page.request.post("/api/role-requests", {
     data: { serviceId: "voice", reason: "Bitte Voice freischalten.", source: "https://example.invalid/private-path" }
   });
-  expect(publicCreate.status()).toBe(201);
-  const publicCreated = await publicCreate.json();
-  expectPublicSafeRoleRequest(publicCreated.request);
-  expect(publicCreated.request.serviceId).toBe("voice");
-  expect(publicCreated.request.status).toBe("requested");
+  expect(unauthenticatedCreate.status()).toBe(401);
+  expect(await unauthenticatedCreate.json()).toEqual({ message: "Trusted login required." });
 
-  const publicDuplicate = await page.request.post("/api/role-requests", {
-    data: { serviceId: "voice", reason: "Noch einmal Voice.", source: "https://example.invalid/second-private-path" }
+  const trustedVoiceCreate = await page.request.post("/api/role-requests", {
+    data: { serviceId: "voice", reason: "Bitte Voice freischalten.", source: "https://example.invalid/private-path?access_token=secret" },
+    headers: { "x-schnick-schnack-user": "franka" }
   });
-  expect(publicDuplicate.status()).toBe(200);
-  const publicDuplicated = await publicDuplicate.json();
-  expectPublicSafeRoleRequest(publicDuplicated.request);
-  expect(publicDuplicated.request.serviceId).toBe("voice");
-  expect(publicDuplicated.request.status).toBe("requested");
+  expect(trustedVoiceCreate.status()).toBe(201);
+  const trustedVoiceCreated = await trustedVoiceCreate.json();
+  expect(trustedVoiceCreated.request.serviceId).toBe("voice");
+  expect(trustedVoiceCreated.request.status).toBe("requested");
+  expect(trustedVoiceCreated.request.requester).toBe("franka");
+  expect(trustedVoiceCreated.request.source).toBe("landing-page");
+
+  const trustedVoiceDuplicate = await page.request.post("/api/role-requests", {
+    data: { serviceId: "voice", reason: "Noch einmal Voice.", source: "https://example.invalid/second-private-path" },
+    headers: { "x-schnick-schnack-user": "franka" }
+  });
+  expect(trustedVoiceDuplicate.status()).toBe(200);
+  const trustedVoiceDuplicated = await trustedVoiceDuplicate.json();
+  expect(trustedVoiceDuplicated.request.id).toBe(trustedVoiceCreated.request.id);
+  expect(trustedVoiceDuplicated.request.status).toBe("requested");
+  expect(trustedVoiceDuplicated.request.source).toBe("landing-page");
 
   const adminBeforeReview = await page.request.get("/api/admin/role-requests", {
     headers: { "x-schnick-schnack-user": "admin", "x-schnick-schnack-roles": "portal-admin" }
@@ -683,9 +746,10 @@ test("role requests can be created and reviewed through sqlite APIs", async ({ p
   const adminBeforeReviewBody = await adminBeforeReview.json();
   const publicInternalRequest = adminBeforeReviewBody.requests.find(
     (request: { serviceId: string; requester: string; id: string }) =>
-      request.serviceId === "voice" && request.requester === "landing-page-user"
+      request.serviceId === "voice" && request.requester === "franka"
   );
   expect(publicInternalRequest?.id).toBeTruthy();
+  expect(publicInternalRequest.source).toBe("landing-page");
 
   const approve = await page.request.post(`/api/admin/role-requests/${created.request.id}/approve`, {
     headers: { "x-schnick-schnack-user": "admin", "x-schnick-schnack-roles": "portal-admin" }
@@ -714,11 +778,11 @@ test("role requests can be created and reviewed through sqlite APIs", async ({ p
   });
   expect(publicApprove.ok()).toBe(true);
   const publicApprovedCreate = await page.request.post("/api/role-requests", {
-    data: { serviceId: "voice", reason: "Terminal duplicate.", source: "https://example.invalid/terminal-private-path" }
+    data: { serviceId: "voice", reason: "Terminal duplicate.", source: "https://example.invalid/terminal-private-path" },
+    headers: { "x-schnick-schnack-user": "franka" }
   });
   expect(publicApprovedCreate.status()).toBe(200);
   const publicApprovedCreateBody = await publicApprovedCreate.json();
-  expectPublicSafeRoleRequest(publicApprovedCreateBody.request);
   expect(publicApprovedCreateBody.request.serviceId).toBe("voice");
   expect(publicApprovedCreateBody.request.status).toBe("approved");
 

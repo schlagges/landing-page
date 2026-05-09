@@ -65,3 +65,7 @@ sudo cp deploy/nginx-schnick-schnack.info.conf /etc/nginx/sites-available/schnic
 sudo nginx -t
 sudo systemctl reload nginx
 ```
+
+Die Standard-Nginx-Konfiguration löscht `X-Schnick-Schnack-User`, `X-Schnick-Schnack-Roles` und die entsprechenden `X-Forwarded-*`-Header bewusst, damit Clients keine Admin-Rollen fälschen können. Rollen-Anfragen und Admin-Aktionen funktionieren serverseitig erst, wenn ein vertrauenswürdiger lokaler Auth-Proxy diese Header setzt.
+
+Für einen OAuth2-Proxy auf `127.0.0.1:4180` liegt eine Admin-fähige Beispielkonfiguration unter `deploy/nginx-schnick-schnack.info.oauth2-proxy.conf`. Der Proxy muss `X-Auth-Request-User` und `X-Auth-Request-Groups` liefern; Gruppen wie `portal-admin`, `admin` oder `keycloak-admin` werden vom Portal als Admin-Rollen akzeptiert.

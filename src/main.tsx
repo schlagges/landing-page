@@ -14,6 +14,7 @@ import {
   Slack,
   SlidersHorizontal,
   Sun,
+  XCircle,
   UserRound
 } from "lucide-react";
 import { StrictMode, useEffect, useMemo, useState } from "react";
@@ -64,6 +65,8 @@ type RoleRequestSnapshot = {
 type AdminRoleRequestsState = {
   requests: RoleRequest[];
   status: "idle" | "loaded" | "unavailable";
+  actionId: string | null;
+  reviewRequest: (request: RoleRequest, decision: Extract<RoleRequestState, "approved" | "rejected">) => Promise<void>;
 };
 
 type PublicService = {
@@ -507,10 +510,6 @@ function accessLabel(service: PublicService, access: UserAccess): string {
   return hasServiceRole(service, access) ? "Zugriff aktiv" : "Rolle fehlt";
 }
 
-function requesterLabel(loginState: LoginState | null): string {
-  return loginState?.value ?? "landing-page-user";
-}
-
 function roleRequestState(request: RoleRequest): RoleRequestState {
   return request.status ?? request.state ?? "requested";
 }
@@ -887,7 +886,7 @@ function useRoleRequests() {
     void loadRequests();
   }, []);
 
-  async function requestRole(service: PublicService, requester: string) {
+  async function requestRole(service: PublicService) {
     if (!service.requiredRole) {
       return;
     }
@@ -899,8 +898,7 @@ function useRoleRequests() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           serviceId: service.id,
-          requester,
-          source: window.location.href
+          reason: ""
         })
       });
 
@@ -934,11 +932,15 @@ function useRoleRequests() {
 }
 
 function useAdminRoleRequests(enabled: boolean): AdminRoleRequestsState {
-  const [state, setState] = useState<AdminRoleRequestsState>({ requests: [], status: "idle" });
+  const [state, setState] = useState<Omit<AdminRoleRequestsState, "reviewRequest">>({
+    requests: [],
+    status: "idle",
+    actionId: null
+  });
 
   useEffect(() => {
     if (!enabled) {
-      setState({ requests: [], status: "idle" });
+      setState({ requests: [], status: "idle", actionId: null });
       return;
     }
 
@@ -954,11 +956,11 @@ function useAdminRoleRequests(enabled: boolean): AdminRoleRequestsState {
         }
         const data = (await response.json()) as RoleRequestSnapshot;
         if (!closed) {
-          setState({ requests: Array.isArray(data.requests) ? data.requests : [], status: "loaded" });
+          setState({ requests: Array.isArray(data.requests) ? data.requests : [], status: "loaded", actionId: null });
         }
       } catch {
         if (!closed) {
-          setState({ requests: [], status: "unavailable" });
+          setState({ requests: [], status: "unavailable", actionId: null });
         }
       }
     }
@@ -970,7 +972,34 @@ function useAdminRoleRequests(enabled: boolean): AdminRoleRequestsState {
     };
   }, [enabled]);
 
-  return state;
+  async function reviewRequest(request: RoleRequest, decision: Extract<RoleRequestState, "approved" | "rejected">) {
+    if (!request.id) {
+      return;
+    }
+
+    setState((current) => ({ ...current, actionId: request.id ?? null }));
+    try {
+      const response = await fetch(`/api/admin/role-requests/${encodeURIComponent(request.id)}/${decision === "approved" ? "approve" : "reject"}`, {
+        method: "POST"
+      });
+      if (!response.ok) {
+        throw new Error("Review failed");
+      }
+
+      const data = (await response.json()) as { request?: RoleRequest };
+      setState((current) => ({
+        requests: data.request
+          ? current.requests.map((item) => (item.id === data.request!.id ? data.request! : item))
+          : current.requests,
+        status: "loaded",
+        actionId: null
+      }));
+    } catch {
+      setState((current) => ({ ...current, status: "unavailable", actionId: null }));
+    }
+  }
+
+  return { ...state, reviewRequest };
 }
 
 function useBuildInfo(): BuildInfo | null {
@@ -2012,6 +2041,26 @@ function AdminSection({
                 <strong>{request.serviceName}</strong>
                 <span>{request.requester ?? "Öffentlich"}</span>
                 <StatusPill state={roleRequestState(request)} />
+                {roleRequestState(request) === "requested" && (
+                  <div className="request-actions" aria-label={`Berechtigungsanfrage ${request.serviceName} bearbeiten`}>
+                    <button
+                      aria-label={`${request.serviceName} genehmigen`}
+                      disabled={roleRequests.actionId === request.id}
+                      onClick={() => void roleRequests.reviewRequest(request, "approved")}
+                      type="button"
+                    >
+                      <CheckCircle2 size={16} aria-hidden="true" />
+                    </button>
+                    <button
+                      aria-label={`${request.serviceName} ablehnen`}
+                      disabled={roleRequests.actionId === request.id}
+                      onClick={() => void roleRequests.reviewRequest(request, "rejected")}
+                      type="button"
+                    >
+                      <XCircle size={16} aria-hidden="true" />
+                    </button>
+                  </div>
+                )}
               </div>
             ))
           )}
@@ -2196,7 +2245,7 @@ function App() {
   const onlineCount = activeServices.filter((service) => service.state === "online").length;
 
   function requestRole(service: PublicService) {
-    void roleRequestState.requestRole(service, requesterLabel(loginState));
+    void roleRequestState.requestRole(service);
   }
 
   function changeTheme(theme: ThemeId) {

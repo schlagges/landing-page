@@ -750,7 +750,7 @@ async function postRoleRequestToRocketChat(request: RoleRequest): Promise<void> 
       },
       body: JSON.stringify({
         channel: `#${ROLE_REQUEST_CHANNEL}`,
-        text: `@alle Keycloak admins Rolle ${request.role} für ${request.serviceName} angefragt. Quelle: ${request.source}`
+        text: `@alle Keycloak admins Rolle ${request.role} für ${request.serviceName} von ${request.requester} angefragt.`
       }),
       signal: controller.signal
     });
@@ -1086,13 +1086,18 @@ app.post("/api/role-requests", async (request, response) => {
   const serviceId = typeof body.serviceId === "string" ? body.serviceId.trim() : "";
   const service = findService(serviceId);
 
+  if (!context.isTrustedRequester) {
+    response.status(401).json({ message: "Trusted login required." });
+    return;
+  }
+
   if (!service?.requiredRole) {
     response.status(400).json({ message: "Unknown protected service." });
     return;
   }
 
   const reason = typeof body.reason === "string" ? sanitizeUpdateText(body.reason).slice(0, 500) : "";
-  const source = typeof body.source === "string" ? sanitizeUpdateText(body.source, "landing-page").slice(0, 180) : "landing-page";
+  const source = "landing-page";
   const result = createRoleRequest(db, service, context.requester, reason, source);
 
   if (result.created) {

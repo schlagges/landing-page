@@ -77,7 +77,7 @@ export function requestContext(request: Request): RequestContext {
     ? request.headers["x-schnick-schnack-user"] ?? request.headers["x-forwarded-user"]
     : undefined;
   const isTrustedRequester = typeof trustedRequester === "string" && trustedRequester.trim().length > 0;
-  const requester = sanitizeIdentity(trustedRequester ?? request.query.requester, "landing-page-user");
+  const requester = sanitizeIdentity(trustedRequester, "anonymous");
 
   return {
     requester,
