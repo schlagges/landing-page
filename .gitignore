@@ -8,3 +8,4 @@ test-results/
 playwright-report-ui-review/
 test-results-ui-review/
 layout-review-summary-*.md
+.superpowers/
