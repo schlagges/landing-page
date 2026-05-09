@@ -1,11 +1,17 @@
 import express from "express";
 import { createServer } from "node:http";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { openDatabase } from "./db.js";
-import { requireAdmin } from "./request-context.js";
+import {
+  createRoleRequest,
+  listRoleRequests,
+  listRoleRequestsForRequester,
+  reviewRoleRequest
+} from "./role-requests.js";
+import { requestContext, requireAdmin } from "./request-context.js";
 
 type ServiceState = "online" | "degraded" | "offline" | "checking" | "planned";
 type ServiceCategory = "communication" | "identity" | "development" | "ai" | "roadmap";
@@ -189,7 +195,6 @@ const ROCKET_CHAT_CHANNEL = process.env.ROCKET_CHAT_CHANNEL ?? "landing-feed";
 const ROLE_REQUEST_CHANNEL = process.env.ROLE_REQUEST_CHANNEL ?? "keycloak-admins";
 const ROLE_REQUEST_CHANNEL_URL =
   process.env.ROLE_REQUEST_CHANNEL_URL ?? `https://slack.schnick-schnack.info/channel/${ROLE_REQUEST_CHANNEL}`;
-const ROLE_REQUESTS_FILE = process.env.ROLE_REQUESTS_FILE ?? path.resolve("data", "role-requests.json");
 const ROCKET_CHAT_CHANNEL_URL =
   process.env.ROCKET_CHAT_CHANNEL_URL ?? `https://chat.schnick-schnack.info/channel/${ROCKET_CHAT_CHANNEL}`;
 const ROCKET_CHAT_MESSAGE_LIMIT = Math.min(
@@ -701,59 +706,8 @@ async function updateSnapshot(): Promise<UpdateSnapshot> {
   };
 }
 
-function readRoleRequests(): RoleRequest[] {
-  try {
-    if (!existsSync(ROLE_REQUESTS_FILE)) {
-      return [];
-    }
-
-    const data = JSON.parse(readFileSync(ROLE_REQUESTS_FILE, "utf8")) as unknown;
-    if (!Array.isArray(data)) {
-      return [];
-    }
-
-    return data.filter((item): item is RoleRequest => {
-      if (!item || typeof item !== "object") {
-        return false;
-      }
-
-      const request = item as Partial<RoleRequest>;
-      return (
-        typeof request.id === "string" &&
-        typeof request.serviceId === "string" &&
-        typeof request.serviceName === "string" &&
-        typeof request.role === "string" &&
-        request.state === "requested" &&
-        typeof request.requester === "string" &&
-        typeof request.source === "string" &&
-        typeof request.createdAt === "string" &&
-        typeof request.updatedAt === "string"
-      );
-    });
-  } catch {
-    return [];
-  }
-}
-
-function writeRoleRequests(requests: RoleRequest[]): void {
-  mkdirSync(path.dirname(ROLE_REQUESTS_FILE), { recursive: true });
-  writeFileSync(ROLE_REQUESTS_FILE, JSON.stringify(requests, null, 2), "utf8");
-}
-
-function roleRequestId(serviceId: string, role: string, requester: string): string {
-  return `${serviceId}:${role}:${requester}`.toLowerCase().replace(/[^a-z0-9:._-]+/g, "-").slice(0, 180);
-}
-
 function findService(serviceId: string): Pick<PublicService, "id" | "name" | "requiredRole"> | undefined {
   return latestSnapshot.services.find((service) => service.id === serviceId) ?? targets.find((target) => target.id === serviceId);
-}
-
-function normalizeRequester(value: unknown): string {
-  if (typeof value !== "string") {
-    return "unbekannt";
-  }
-
-  return sanitizeUpdateText(value, "unbekannt").slice(0, 80);
 }
 
 async function postRoleRequestToRocketChat(request: RoleRequest): Promise<void> {
@@ -1036,12 +990,16 @@ app.get("/api/role-requests", (_request, response) => {
   response.json({
     generatedAt: new Date().toISOString(),
     channel: ROLE_REQUEST_CHANNEL_URL,
-    requests: readRoleRequests()
+    requests: listRoleRequests(db)
   });
 });
 
-app.get("/api/role-requests/me", (_request, response) => {
-  response.json({ generatedAt: new Date().toISOString(), requests: [] });
+app.get("/api/role-requests/me", (request, response) => {
+  const context = requestContext(request);
+  response.json({
+    generatedAt: new Date().toISOString(),
+    requests: listRoleRequestsForRequester(db, context.requester)
+  });
 });
 
 app.get("/api/admin/role-requests", (request, response) => {
@@ -1049,15 +1007,12 @@ app.get("/api/admin/role-requests", (request, response) => {
     return;
   }
 
-  response.json({ generatedAt: new Date().toISOString(), requests: [] });
+  response.json({ generatedAt: new Date().toISOString(), requests: listRoleRequests(db) });
 });
 
 app.post("/api/role-requests", async (request, response) => {
-  const body = request.body as {
-    serviceId?: unknown;
-    requester?: unknown;
-    source?: unknown;
-  };
+  const body = request.body as { serviceId?: unknown; reason?: unknown; source?: unknown };
+  const context = requestContext(request);
   const serviceId = typeof body.serviceId === "string" ? body.serviceId.trim() : "";
   const service = findService(serviceId);
 
@@ -1066,34 +1021,45 @@ app.post("/api/role-requests", async (request, response) => {
     return;
   }
 
-  const requester = normalizeRequester(body.requester);
+  const reason = typeof body.reason === "string" ? sanitizeUpdateText(body.reason).slice(0, 500) : "";
   const source = typeof body.source === "string" ? sanitizeUpdateText(body.source, "landing-page").slice(0, 180) : "landing-page";
-  const now = new Date().toISOString();
-  const id = roleRequestId(service.id, service.requiredRole, requester);
-  const requests = readRoleRequests();
-  const existing = requests.find((item) => item.id === id && item.state === "requested");
+  const result = createRoleRequest(db, service, context.requester, reason, source);
 
-  if (existing) {
-    response.status(200).json({ request: existing, channel: ROLE_REQUEST_CHANNEL_URL });
+  void postRoleRequestToRocketChat({
+    id: result.request.id,
+    serviceId: result.request.serviceId,
+    serviceName: result.request.serviceName,
+    role: result.request.requiredRole,
+    state: result.request.status,
+    requester: result.request.requester,
+    source: result.request.source,
+    createdAt: result.request.createdAt,
+    updatedAt: result.request.updatedAt
+  });
+
+  response.status(result.created ? 201 : 200).json({ request: result.request, channel: ROLE_REQUEST_CHANNEL_URL });
+});
+
+app.post("/api/admin/role-requests/:id/approve", (request, response) => {
+  const context = requireAdmin(request, response);
+  if (!context) return;
+  const reviewed = reviewRoleRequest(db, request.params.id, "approved", context.requester);
+  if (!reviewed) {
+    response.status(404).json({ message: "Role request not found." });
     return;
   }
+  response.json({ request: reviewed });
+});
 
-  const roleRequest: RoleRequest = {
-    id,
-    serviceId: service.id,
-    serviceName: service.name,
-    role: service.requiredRole,
-    state: "requested",
-    requester,
-    source,
-    createdAt: now,
-    updatedAt: now
-  };
-
-  const nextRequests = [roleRequest, ...requests].slice(0, 200);
-  writeRoleRequests(nextRequests);
-  void postRoleRequestToRocketChat(roleRequest);
-  response.status(201).json({ request: roleRequest, channel: ROLE_REQUEST_CHANNEL_URL });
+app.post("/api/admin/role-requests/:id/reject", (request, response) => {
+  const context = requireAdmin(request, response);
+  if (!context) return;
+  const reviewed = reviewRoleRequest(db, request.params.id, "rejected", context.requester);
+  if (!reviewed) {
+    response.status(404).json({ message: "Role request not found." });
+    return;
+  }
+  response.json({ request: reviewed });
 });
 
 app.get("/api/design-preferences", (_request, response) => {

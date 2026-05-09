@@ -262,23 +262,28 @@ test("system rows keep public links and receive the active theme", async ({ page
 test("module access shows missing-role request action", async ({ page }) => {
   await page.route("**/api/role-requests", async (route) => {
     if (route.request().method() === "POST") {
-      const body = route.request().postDataJSON() as { serviceId: string };
+      const body = route.request().postDataJSON() as { serviceId: string; reason?: string };
       expect(body.serviceId).toBe("schnack-to-text");
+      expect(body.reason ?? "").toBe("");
       await route.fulfill({
         contentType: "application/json",
         status: 201,
         body: JSON.stringify({
-          channel: "https://slack.schnick-schnack.info/channel/keycloak-admins",
           request: {
             id: "schnack-to-text:schnack-to-text:landing-page-user",
             serviceId: "schnack-to-text",
             serviceName: "Schnack To Text",
+            requiredRole: "schnack-to-text",
             role: "schnack-to-text",
+            status: "requested",
             state: "requested",
             requester: "landing-page-user",
+            reason: "",
             source: "test",
             createdAt: "2026-05-09T00:00:00.000Z",
-            updatedAt: "2026-05-09T00:00:00.000Z"
+            updatedAt: "2026-05-09T00:00:00.000Z",
+            reviewedAt: null,
+            reviewer: null
           }
         })
       });
@@ -289,7 +294,6 @@ test("module access shows missing-role request action", async ({ page }) => {
       contentType: "application/json",
       body: JSON.stringify({
         generatedAt: "2026-05-09T00:00:00.000Z",
-        channel: "https://slack.schnick-schnack.info/channel/keycloak-admins",
         requests: []
       })
     });
@@ -305,6 +309,47 @@ test("module access shows missing-role request action", async ({ page }) => {
   await expect(schnackToText.getByText("Rolle fehlt", { exact: true })).toBeVisible();
   await schnackToText.getByRole("button", { name: "Rolle anfragen" }).click();
   await expect(schnackToText.getByText("Rolle angefragt", { exact: true })).toBeVisible();
+});
+
+test("role requests can be created and reviewed through sqlite APIs", async ({ page }) => {
+  const create = await page.request.post("/api/role-requests", {
+    data: {
+      serviceId: "schnack-to-text",
+      reason: "Ich brauche Transkription für Projektmeetings.",
+      source: "playwright"
+    },
+    headers: { "x-schnick-schnack-user": "boris" }
+  });
+  expect(create.status()).toBe(201);
+  const created = await create.json();
+  expect(created.request.serviceId).toBe("schnack-to-text");
+  expect(created.request.requiredRole).toBe("schnack-to-text");
+  expect(created.request.status).toBe("requested");
+  expect(created.request.reason).toBe("Ich brauche Transkription für Projektmeetings.");
+
+  const mine = await page.request.get("/api/role-requests/me", {
+    headers: { "x-schnick-schnack-user": "boris" }
+  });
+  expect(mine.ok()).toBe(true);
+  const mineBody = await mine.json();
+  expect(mineBody.requests.some((request: { id: string }) => request.id === created.request.id)).toBe(true);
+
+  const approve = await page.request.post(`/api/admin/role-requests/${created.request.id}/approve`, {
+    headers: { "x-schnick-schnack-user": "admin", "x-schnick-schnack-roles": "portal-admin" }
+  });
+  expect(approve.ok()).toBe(true);
+  expect((await approve.json()).request.status).toBe("approved");
+
+  const rejectCreate = await page.request.post("/api/role-requests", {
+    data: { serviceId: "gitlab", reason: "Code lesen.", source: "playwright" },
+    headers: { "x-schnick-schnack-user": "boris" }
+  });
+  const rejectCreated = await rejectCreate.json();
+  const reject = await page.request.post(`/api/admin/role-requests/${rejectCreated.request.id}/reject`, {
+    headers: { "x-schnick-schnack-user": "admin", "x-schnick-schnack-roles": "portal-admin" }
+  });
+  expect(reject.ok()).toBe(true);
+  expect((await reject.json()).request.status).toBe("rejected");
 });
 
 test("global chat and system status remain persistent dashboard areas", async ({ page }) => {
