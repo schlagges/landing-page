@@ -1,4 +1,5 @@
 import type { Database } from "./db.js";
+import { createHash } from "node:crypto";
 
 export type ModuleNewsEventType = "release" | "tag" | "merge";
 
@@ -138,7 +139,9 @@ function tagName(value: unknown): string | null {
 }
 
 function moduleNewsId(externalEventId: string): string {
-  return externalEventId.toLowerCase().replace(/[^a-z0-9:._-]+/g, "-").slice(0, 180);
+  const slug = externalEventId.toLowerCase().replace(/[^a-z0-9:._-]+/g, "-").slice(0, 140);
+  const hash = createHash("sha256").update(externalEventId).digest("hex").slice(0, 12);
+  return `${slug}-${hash}`;
 }
 
 export function listModuleNews(db: Database, limit = 50): ModuleNewsRecord[] {
@@ -159,6 +162,10 @@ export function saveModuleNews(db: Database, news: ModuleNewsInput): { news: Mod
     .run(id, news.externalEventId, news.projectId, news.projectName, news.eventType, news.title, news.url, news.eventAt, now);
 
   const row = db.prepare("SELECT * FROM module_news WHERE external_event_id = ?").get(news.externalEventId) as ModuleNewsRow;
+  if (!row) {
+    throw new Error(`Module news insert was ignored without existing row for external event ${news.externalEventId}.`);
+  }
+
   return { news: mapModuleNews(row), created: Number(result.changes) > 0 };
 }
 

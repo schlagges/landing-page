@@ -356,6 +356,32 @@ test("gitlab top-level release events are stored as module news", async ({ page 
   expect(matches).toHaveLength(1);
 });
 
+test("gitlab tag events with colliding slugs are stored separately", async ({ page }) => {
+  const payloads = ["release/v1", "release-v1"].map((tag, index) => ({
+    object_kind: "tag_push",
+    project: {
+      id: 47,
+      name: "OpenVoice",
+      web_url: "https://labs.schnick-schnack.info/schnick-schnack/openvoice"
+    },
+    ref: `refs/tags/${tag}`,
+    checkout_sha: `${index + 1}`.repeat(40),
+    commits: [{ timestamp: "2026-05-08T20:15:00.000+02:00" }]
+  }));
+
+  for (const payload of payloads) {
+    const response = await page.request.post("/api/gitlab/events", { data: payload, headers: gitLabWebhookHeaders });
+    expect(response.ok()).toBe(true);
+  }
+
+  const list = await page.request.get("/api/module-news");
+  const body = await list.json();
+  const matches = body.news.filter((item: { externalEventId: string }) =>
+    ["gitlab:tag:47:release/v1", "gitlab:tag:47:release-v1"].includes(item.externalEventId)
+  );
+  expect(matches).toHaveLength(2);
+});
+
 test("side navigation opens detailed status and channel views", async ({ page }) => {
   await page.goto("/");
 
