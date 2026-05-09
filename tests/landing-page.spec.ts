@@ -160,10 +160,8 @@ test("admin area is hidden without admin role and visible with admin role", asyn
     adminRoleHeaders = route.request().headers();
     await route.fulfill({
       contentType: "application/json",
-      json: {
-        generatedAt: new Date().toISOString(),
-        requests: []
-      }
+      status: 403,
+      json: { message: "Admin role required." }
     });
   });
   await page.route("**/api/module-news", async (route) => {
@@ -187,10 +185,14 @@ test("admin area is hidden without admin role and visible with admin role", asyn
   await page.getByRole("button", { name: "Admin", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Adminbereich" })).toBeVisible();
   await expect(page.getByText("Berechtigungsanfragen")).toBeVisible();
+  await expect(page.getByText("Admin-Daten nicht freigegeben")).toBeVisible();
   await expect(page.getByText("Monitoring-Verlauf")).toBeVisible();
   await expect(page.getByText("Modulnews")).toBeVisible();
   await expect.poll(() => adminRoleRequestCalls).toBe(1);
-  expect(adminRoleHeaders?.["x-schnick-schnack-roles"]).toContain("portal-admin");
+  expect(adminRoleHeaders?.["x-schnick-schnack-roles"]).toBeUndefined();
+  expect(adminRoleHeaders?.["x-forwarded-roles"]).toBeUndefined();
+  expect(adminRoleHeaders?.["x-schnick-schnack-user"]).toBeUndefined();
+  expect(adminRoleHeaders?.["x-forwarded-user"]).toBeUndefined();
   expect(moduleNewsCalls).toBeGreaterThan(0);
   expect(monitoringHistoryCalls).toBeGreaterThan(0);
 });

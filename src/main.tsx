@@ -61,6 +61,11 @@ type RoleRequestSnapshot = {
   requests: RoleRequest[];
 };
 
+type AdminRoleRequestsState = {
+  requests: RoleRequest[];
+  status: "idle" | "loaded" | "unavailable";
+};
+
 type PublicService = {
   id: string;
   name: string;
@@ -928,21 +933,12 @@ function useRoleRequests() {
   };
 }
 
-function adminRequestHeaders(userAccess: UserAccess, loginState: LoginState | null): HeadersInit {
-  const headers: Record<string, string> = {};
-  if (userAccess.roles.size > 0) {
-    headers["x-schnick-schnack-roles"] = Array.from(userAccess.roles).join(",");
-  }
-  headers["x-schnick-schnack-user"] = requesterLabel(loginState);
-  return headers;
-}
-
-function useAdminRoleRequests(enabled: boolean, userAccess: UserAccess, loginState: LoginState | null): RoleRequest[] {
-  const [requests, setRequests] = useState<RoleRequest[]>([]);
+function useAdminRoleRequests(enabled: boolean): AdminRoleRequestsState {
+  const [state, setState] = useState<AdminRoleRequestsState>({ requests: [], status: "idle" });
 
   useEffect(() => {
     if (!enabled) {
-      setRequests([]);
+      setState({ requests: [], status: "idle" });
       return;
     }
 
@@ -951,19 +947,18 @@ function useAdminRoleRequests(enabled: boolean, userAccess: UserAccess, loginSta
     async function loadRequests() {
       try {
         const response = await fetch("/api/admin/role-requests", {
-          cache: "no-store",
-          headers: adminRequestHeaders(userAccess, loginState)
+          cache: "no-store"
         });
         if (!response.ok) {
           throw new Error("Admin role requests unavailable");
         }
         const data = (await response.json()) as RoleRequestSnapshot;
         if (!closed) {
-          setRequests(Array.isArray(data.requests) ? data.requests : []);
+          setState({ requests: Array.isArray(data.requests) ? data.requests : [], status: "loaded" });
         }
       } catch {
         if (!closed) {
-          setRequests([]);
+          setState({ requests: [], status: "unavailable" });
         }
       }
     }
@@ -973,9 +968,9 @@ function useAdminRoleRequests(enabled: boolean, userAccess: UserAccess, loginSta
     return () => {
       closed = true;
     };
-  }, [enabled, loginState, userAccess]);
+  }, [enabled]);
 
-  return requests;
+  return state;
 }
 
 function useBuildInfo(): BuildInfo | null {
@@ -1949,10 +1944,10 @@ function AdminSection({
 }: {
   history: MonitoringHistorySnapshot | null;
   moduleNews: ModuleNews[];
-  roleRequests: RoleRequest[];
+  roleRequests: AdminRoleRequestsState;
 }) {
   const historyServices = Array.isArray(history?.services) ? history.services : [];
-  const visibleRoleRequests = Array.isArray(roleRequests) ? roleRequests : [];
+  const visibleRoleRequests = Array.isArray(roleRequests.requests) ? roleRequests.requests : [];
   const visibleModuleNews = Array.isArray(moduleNews) ? moduleNews : [];
 
   return (
@@ -1979,13 +1974,17 @@ function AdminSection({
         </article>
         <article className="admin-panel">
           <h3>Berechtigungsanfragen</h3>
-          {visibleRoleRequests.slice(0, 8).map((request) => (
-            <div className="request-row" key={request.id ?? `${request.serviceId}-${request.role}`}>
-              <strong>{request.serviceName}</strong>
-              <span>{request.requester ?? "Öffentlich"}</span>
-              <StatusPill state={roleRequestState(request)} />
-            </div>
-          ))}
+          {roleRequests.status === "unavailable" ? (
+            <div className="panel-empty">Admin-Daten nicht freigegeben</div>
+          ) : (
+            visibleRoleRequests.slice(0, 8).map((request) => (
+              <div className="request-row" key={request.id ?? `${request.serviceId}-${request.role}`}>
+                <strong>{request.serviceName}</strong>
+                <span>{request.requester ?? "Öffentlich"}</span>
+                <StatusPill state={roleRequestState(request)} />
+              </div>
+            ))
+          )}
         </article>
         <article className="admin-panel">
           <h3>Modulnews</h3>
@@ -2152,7 +2151,7 @@ function App() {
   const monitoringHistory = useMonitoringHistory(adminViewEnabled);
   const moduleNews = useModuleNews(adminViewEnabled);
   const roleRequestState = useRoleRequests();
-  const adminRoleRequests = useAdminRoleRequests(adminViewEnabled, userAccess, loginState);
+  const adminRoleRequests = useAdminRoleRequests(adminViewEnabled);
 
   const services = snapshot?.services ?? [];
   const activeServices = services.filter((service) => service.state !== "planned");
