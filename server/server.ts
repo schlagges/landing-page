@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { openDatabase } from "./db.js";
+import { insertMonitoringSamples, monitoringHistory } from "./monitoring-history.js";
 import {
   createRoleRequest,
   listPublicRoleRequests,
@@ -938,6 +939,16 @@ async function refreshHealth(): Promise<HealthSnapshot> {
     overall: deriveOverall(services),
     services
   };
+  insertMonitoringSamples(
+    db,
+    services.map((service) => ({
+      serviceId: service.id,
+      state: service.state,
+      message: service.message,
+      responseMs: service.responseMs,
+      checkedAt: service.updatedAt ?? latestSnapshot.generatedAt
+    }))
+  );
   return latestSnapshot;
 }
 
@@ -981,7 +992,13 @@ app.get("/api/updates", async (_request, response) => {
 });
 
 app.get("/api/monitoring/history", (_request, response) => {
-  response.json({ generatedAt: new Date().toISOString(), services: [] });
+  response.json({
+    generatedAt: new Date().toISOString(),
+    services: monitoringHistory(
+      db,
+      targets.map((target) => target.id)
+    )
+  });
 });
 
 app.get("/api/module-news", (_request, response) => {

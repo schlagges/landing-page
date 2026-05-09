@@ -91,6 +91,26 @@ test("persistent portal endpoints expose empty initial snapshots", async ({ page
   expect(Array.isArray(myRequests.requests)).toBe(true);
 });
 
+test("monitoring history contains service trend samples", async ({ page }) => {
+  await page.request.get("/api/health");
+  const response = await page.request.get("/api/monitoring/history");
+  expect(response.ok()).toBe(true);
+  const body = await response.json();
+  expect(Array.isArray(body.services)).toBe(true);
+  const voice = body.services.find((service: { serviceId: string }) => service.serviceId === "voice");
+  expect(voice).toBeTruthy();
+  expect(Array.isArray(voice.samples)).toBe(true);
+  expect(voice.samples.length).toBeGreaterThan(0);
+  expect(voice.samples[0]).toEqual(
+    expect.objectContaining({
+      serviceId: "voice",
+      state: expect.any(String),
+      message: expect.any(String),
+      checkedAt: expect.any(String)
+    })
+  );
+});
+
 test("admin role request endpoint requires an admin role", async ({ page }) => {
   const denied = await page.request.get("/api/admin/role-requests");
   expect(denied.status()).toBe(403);
