@@ -744,7 +744,7 @@ function dedupePublicUpdates(updates: PublicUpdate[]): PublicUpdate[] {
 
 function storedModuleNewsUpdates(): PublicUpdate[] {
   return listModuleNews(db, 30).map((item) => ({
-    id: item.id,
+    id: item.externalEventId,
     serviceId: item.projectName.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
     date: item.eventAt,
     title: item.title,

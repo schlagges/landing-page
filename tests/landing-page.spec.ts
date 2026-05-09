@@ -261,6 +261,11 @@ test("gitlab events are deduplicated into module news", async ({ page }) => {
   const body = await list.json();
   const matches = body.news.filter((item: { externalEventId: string }) => item.externalEventId === "gitlab:merge:42:34");
   expect(matches).toHaveLength(1);
+
+  const updates = await page.request.get("/api/updates");
+  const updatesBody = await updates.json();
+  const update = updatesBody.updates.find((item: { title: string }) => item.title === "OpenVoice UI-Redesign ohne Dummy-Buttons");
+  expect(update.id).toBe("gitlab:merge:42:34");
 });
 
 test("gitlab webhook rejects missing and invalid tokens", async ({ page }) => {
