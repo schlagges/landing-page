@@ -988,7 +988,8 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server, path: "/ws/health" });
 const db = openDatabase();
-void db;
+let healthInterval: ReturnType<typeof setInterval> | null = null;
+let isShuttingDown = false;
 
 app.disable("x-powered-by");
 app.use(express.json({ limit: "16kb" }));
@@ -1373,11 +1374,50 @@ wss.on("connection", (socket) => {
   socket.send(JSON.stringify(latestSnapshot));
 });
 
+async function shutdown(): Promise<void> {
+  if (isShuttingDown) {
+    return;
+  }
+
+  isShuttingDown = true;
+
+  if (healthInterval) {
+    clearInterval(healthInterval);
+  }
+
+  const closeResults = await Promise.allSettled([
+    new Promise<void>((resolve) => {
+      wss.close(() => resolve());
+    }),
+    new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      });
+    })
+  ]);
+
+  db.close();
+  process.exit(closeResults.some((result) => result.status === "rejected") ? 1 : 0);
+}
+
+process.on("SIGINT", () => {
+  void shutdown();
+});
+
+process.on("SIGTERM", () => {
+  void shutdown();
+});
+
 server.listen(PORT, HOST, () => {
   console.log(`Landing page listening on ${HOST}:${PORT}`);
 });
 
 await refreshHealth();
-setInterval(() => {
+healthInterval = setInterval(() => {
   void refreshHealth().then(broadcast);
 }, Number.isFinite(HEALTH_INTERVAL_MS) ? HEALTH_INTERVAL_MS : 10000);
