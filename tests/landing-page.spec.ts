@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+const gitLabWebhookHeaders = { "X-Gitlab-Token": "test-gitlab-secret" };
+
 function expectPublicSafeRoleRequest(request: Record<string, unknown>) {
   expect(request.serviceId).toBeTruthy();
   expect(request.serviceName).toBeTruthy();
@@ -247,11 +249,11 @@ test("gitlab events are deduplicated into module news", async ({ page }) => {
     }
   };
 
-  const first = await page.request.post("/api/gitlab/events", { data: payload });
+  const first = await page.request.post("/api/gitlab/events", { data: payload, headers: gitLabWebhookHeaders });
   expect(first.ok()).toBe(true);
   expect((await first.json()).news.eventType).toBe("merge");
 
-  const second = await page.request.post("/api/gitlab/events", { data: payload });
+  const second = await page.request.post("/api/gitlab/events", { data: payload, headers: gitLabWebhookHeaders });
   expect(second.ok()).toBe(true);
   expect((await second.json()).created).toBe(false);
 
@@ -259,6 +261,75 @@ test("gitlab events are deduplicated into module news", async ({ page }) => {
   const body = await list.json();
   const matches = body.news.filter((item: { externalEventId: string }) => item.externalEventId === "gitlab:merge:42:34");
   expect(matches).toHaveLength(1);
+});
+
+test("gitlab webhook rejects missing and invalid tokens", async ({ page }) => {
+  const payload = {
+    object_kind: "merge_request",
+    event_type: "merge_request",
+    project: { id: 43, name: "OpenVoice" },
+    object_attributes: {
+      iid: 35,
+      state: "merged",
+      title: "Token check",
+      updated_at: "2026-05-08T19:58:34.557+02:00"
+    }
+  };
+
+  const missing = await page.request.post("/api/gitlab/events", { data: payload });
+  expect(missing.status()).toBe(401);
+  expect(await missing.json()).toEqual({ message: "Invalid GitLab webhook token." });
+
+  const invalid = await page.request.post("/api/gitlab/events", { data: payload, headers: { "X-Gitlab-Token": "wrong" } });
+  expect(invalid.status()).toBe(401);
+  expect(await invalid.json()).toEqual({ message: "Invalid GitLab webhook token." });
+});
+
+test("gitlab events do not store unsafe javascript urls", async ({ page }) => {
+  const payload = {
+    object_kind: "merge_request",
+    event_type: "merge_request",
+    project: { id: 44, name: "OpenVoice" },
+    object_attributes: {
+      iid: 36,
+      state: "merged",
+      title: "Unsafe URL",
+      url: "javascript:alert(1)",
+      updated_at: "2026-05-08T19:58:34.557+02:00"
+    }
+  };
+
+  const response = await page.request.post("/api/gitlab/events", { data: payload, headers: gitLabWebhookHeaders });
+  expect(response.ok()).toBe(true);
+  expect((await response.json()).news.url).toBeNull();
+
+  const updates = await page.request.get("/api/updates");
+  const body = await updates.json();
+  const item = body.updates.find((update: { title: string }) => update.title === "Unsafe URL");
+  expect(item.href).toBeUndefined();
+});
+
+test("gitlab tag deletion events are ignored", async ({ page }) => {
+  const payload = {
+    object_kind: "tag_push",
+    project: {
+      id: 45,
+      name: "OpenVoice",
+      web_url: "https://labs.schnick-schnack.info/schnick-schnack/openvoice"
+    },
+    ref: "refs/tags/v1.2.3",
+    checkout_sha: "0000000000000000000000000000000000000000",
+    commits: []
+  };
+
+  const response = await page.request.post("/api/gitlab/events", { data: payload, headers: gitLabWebhookHeaders });
+  expect(response.status()).toBe(202);
+  expect(await response.json()).toEqual({ message: "Ignored GitLab event." });
+
+  const list = await page.request.get("/api/module-news");
+  const body = await list.json();
+  const matches = body.news.filter((item: { externalEventId: string }) => item.externalEventId === "gitlab:tag:45:v1.2.3");
+  expect(matches).toHaveLength(0);
 });
 
 test("side navigation opens detailed status and channel views", async ({ page }) => {

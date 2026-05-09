@@ -59,6 +59,8 @@ type GitLabPayload = {
   release?: GitLabAttributes;
 };
 
+const GITLAB_ALLOWED_ORIGIN = urlOrigin(process.env.GITLAB_BASE_URL ?? "https://labs.schnick-schnack.info");
+
 function mapModuleNews(row: ModuleNewsRow): ModuleNewsRecord {
   return {
     id: row.id,
@@ -86,8 +88,30 @@ function cleanString(value: unknown, maxLength: number): string | null {
   return cleaned.slice(0, maxLength);
 }
 
+function urlOrigin(value: string): string | null {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
 function cleanUrl(value: unknown): string | null {
-  return cleanString(value, 500);
+  const cleaned = cleanString(value, 500);
+  if (!cleaned) {
+    return null;
+  }
+
+  try {
+    const url = new URL(cleaned);
+    if ((url.protocol !== "http:" && url.protocol !== "https:") || url.origin !== GITLAB_ALLOWED_ORIGIN) {
+      return null;
+    }
+
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 function projectId(project: GitLabProject | undefined): string | null {
@@ -124,23 +148,18 @@ export function listModuleNews(db: Database, limit = 50): ModuleNewsRecord[] {
 }
 
 export function saveModuleNews(db: Database, news: ModuleNewsInput): { news: ModuleNewsRecord; created: boolean } {
-  const existing = db
-    .prepare("SELECT * FROM module_news WHERE external_event_id = ?")
-    .get(news.externalEventId) as ModuleNewsRow | undefined;
-  if (existing) {
-    return { news: mapModuleNews(existing), created: false };
-  }
-
   const id = moduleNewsId(news.externalEventId);
   const now = new Date().toISOString();
-  db.prepare(
-    `INSERT INTO module_news (
+  const result = db
+    .prepare(
+      `INSERT OR IGNORE INTO module_news (
       id, external_event_id, project_id, project_name, event_type, title, url, event_at, created_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(id, news.externalEventId, news.projectId, news.projectName, news.eventType, news.title, news.url, news.eventAt, now);
+    )
+    .run(id, news.externalEventId, news.projectId, news.projectName, news.eventType, news.title, news.url, news.eventAt, now);
 
   const row = db.prepare("SELECT * FROM module_news WHERE external_event_id = ?").get(news.externalEventId) as ModuleNewsRow;
-  return { news: mapModuleNews(row), created: true };
+  return { news: mapModuleNews(row), created: Number(result.changes) > 0 };
 }
 
 export function normalizeGitLabEvent(payload: unknown): ModuleNewsInput | null {
@@ -181,6 +200,11 @@ export function normalizeGitLabEvent(payload: unknown): ModuleNewsInput | null {
   }
 
   if (event.object_kind === "tag_push") {
+    const checkoutSha = cleanString(event.checkout_sha, 80);
+    if (!checkoutSha || /^0+$/.test(checkoutSha)) {
+      return null;
+    }
+
     const tag = tagName(event.ref);
     const eventAt = eventDate((event.commits as Array<{ timestamp?: unknown }> | undefined)?.[0]?.timestamp, new Date().toISOString());
     if (!tag || !eventAt) {

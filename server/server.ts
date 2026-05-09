@@ -185,6 +185,7 @@ const SERVICE_INFO_PATH = "/.well-known/schnick-schnack/service-info.json";
 const GITLAB_BASE_URL = process.env.GITLAB_BASE_URL ?? "https://labs.schnick-schnack.info";
 const GITLAB_GROUP_PATH = process.env.GITLAB_GROUP_PATH ?? "schnick-schnack";
 const GITLAB_TOKEN = optionalEnv("GITLAB_TOKEN") ?? optionalEnv("GITLAB_ACCESS_TOKEN") ?? optionalEnv("GLAB_TOKEN");
+const GITLAB_WEBHOOK_SECRET = optionalEnv("GITLAB_WEBHOOK_SECRET");
 const GITLAB_UPDATES_LOOKBACK_HOURS = Math.max(
   1,
   Number.parseInt(process.env.GITLAB_UPDATES_LOOKBACK_HOURS ?? "48", 10) || 48
@@ -700,7 +701,7 @@ async function fetchGitLabUpdates(): Promise<PublicUpdate[]> {
 }
 
 async function updateSnapshot(): Promise<UpdateSnapshot> {
-  const updates = [...storedModuleNewsUpdates(), ...publicServiceInfoUpdates(), ...(await fetchGitLabUpdates())].sort(
+  const updates = dedupePublicUpdates([...storedModuleNewsUpdates(), ...publicServiceInfoUpdates(), ...(await fetchGitLabUpdates())]).sort(
     (left, right) => new Date(right.date).getTime() - new Date(left.date).getTime()
   );
 
@@ -708,6 +709,37 @@ async function updateSnapshot(): Promise<UpdateSnapshot> {
     generatedAt: new Date().toISOString(),
     updates
   };
+}
+
+function publicUpdateDedupeKey(update: PublicUpdate): string | null {
+  const storedMerge = update.id.match(/^gitlab:merge:(\d+):(\d+)$/);
+  if (storedMerge) {
+    return `gitlab:merge:${storedMerge[1]}:${storedMerge[2]}`;
+  }
+
+  const polledMerge = update.id.match(/^gitlab-(\d+)-(\d+)$/);
+  if (polledMerge) {
+    return `gitlab:merge:${polledMerge[1]}:${polledMerge[2]}`;
+  }
+
+  return null;
+}
+
+function dedupePublicUpdates(updates: PublicUpdate[]): PublicUpdate[] {
+  const seen = new Set<string>();
+  return updates.filter((update) => {
+    const key = publicUpdateDedupeKey(update);
+    if (!key) {
+      return true;
+    }
+
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
 }
 
 function storedModuleNewsUpdates(): PublicUpdate[] {
@@ -1022,13 +1054,28 @@ app.get("/api/module-news", (_request, response) => {
 });
 
 app.post("/api/gitlab/events", (request, response) => {
+  if (!GITLAB_WEBHOOK_SECRET) {
+    response.status(503).json({ message: "GitLab webhook secret is not configured." });
+    return;
+  }
+
+  if (request.get("X-Gitlab-Token") !== GITLAB_WEBHOOK_SECRET) {
+    response.status(401).json({ message: "Invalid GitLab webhook token." });
+    return;
+  }
+
   const normalized = normalizeGitLabEvent(request.body);
   if (!normalized) {
     response.status(202).json({ message: "Ignored GitLab event." });
     return;
   }
 
-  response.json(saveModuleNews(db, normalized));
+  try {
+    response.json(saveModuleNews(db, normalized));
+  } catch (error) {
+    console.error("Could not store GitLab event.", error);
+    response.status(500).json({ message: "Could not store GitLab event." });
+  }
 });
 
 app.get("/api/role-requests", (_request, response) => {

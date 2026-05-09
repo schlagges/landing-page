@@ -14,7 +14,7 @@ export default defineConfig({
     trace: "retain-on-failure"
   },
   webServer: {
-    command: `rm -f test-results/landing-page.sqlite* && PORT=${port} SQLITE_DB_PATH=test-results/landing-page.sqlite npm start`,
+    command: `rm -f test-results/landing-page.sqlite* && PORT=${port} SQLITE_DB_PATH=test-results/landing-page.sqlite GITLAB_WEBHOOK_SECRET=test-gitlab-secret npm start`,
     reuseExistingServer: false,
     timeout: 15000,
     url: baseURL
