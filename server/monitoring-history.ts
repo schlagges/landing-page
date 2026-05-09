@@ -66,26 +66,41 @@ export function insertMonitoringSamples(db: Database, samples: MonitoringSampleI
   );
   const retentionLimit = monitoringHistoryLimitPerService();
 
-  for (const sample of samples) {
-    insertStatement.run(sample.serviceId, sample.state, sample.message, sample.responseMs, sample.checkedAt);
-    pruneStatement.run(sample.serviceId, sample.serviceId, retentionLimit);
+  db.exec("BEGIN");
+  try {
+    for (const sample of samples) {
+      insertStatement.run(sample.serviceId, sample.state, sample.message, sample.responseMs, sample.checkedAt);
+      pruneStatement.run(sample.serviceId, sample.serviceId, retentionLimit);
+    }
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
   }
 }
 
 export function monitoringHistory(db: Database, serviceIds: string[], limitPerService = 24): MonitoringHistoryService[] {
-  const statement = db.prepare(
+  const samplesStatement = db.prepare(
     `SELECT * FROM monitoring_samples
      WHERE service_id = ?
      ORDER BY checked_at DESC, id DESC
      LIMIT ?`
   );
+  const incidentsStatement = db.prepare(
+    `SELECT * FROM monitoring_samples
+     WHERE service_id = ?
+       AND state IN ('offline', 'degraded')
+     ORDER BY checked_at DESC, id DESC
+     LIMIT 6`
+  );
 
   return serviceIds.map((serviceId) => {
-    const samples = (statement.all(serviceId, limitPerService) as MonitoringSampleRow[]).map(mapSample);
+    const samples = (samplesStatement.all(serviceId, limitPerService) as MonitoringSampleRow[]).map(mapSample);
+    const incidents = (incidentsStatement.all(serviceId) as MonitoringSampleRow[]).map(mapSample);
     return {
       serviceId,
       samples,
-      incidents: samples.filter((sample) => sample.state === "offline" || sample.state === "degraded").slice(0, 6)
+      incidents
     };
   });
 }
