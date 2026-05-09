@@ -119,12 +119,55 @@ type ServiceInfoResult = {
   data: ServiceInfo | null;
 };
 
+type PublicUpdate = {
+  id: string;
+  serviceId: string;
+  date: string;
+  title: string;
+  text: string;
+  href?: string;
+};
+
+type UpdateSnapshot = {
+  generatedAt: string;
+  updates: PublicUpdate[];
+};
+
+type GitLabMergeRequest = {
+  project_id?: number;
+  iid?: number;
+  state?: string;
+  title?: string;
+  web_url?: string;
+  updated_at?: string;
+  merged_at?: string | null;
+  created_at?: string;
+  changes_count?: string | number | null;
+  references?: {
+    full?: string;
+    relative?: string;
+    short?: string;
+  };
+};
+
 const DEFAULT_TIMEOUT_MS = 4500;
 const INFO_TIMEOUT_MS = Number.parseInt(process.env.INFO_TIMEOUT_MS ?? "3500", 10);
 const HEALTH_INTERVAL_MS = Number.parseInt(process.env.HEALTH_INTERVAL_MS ?? "10000", 10);
 const HOST = process.env.HOST ?? "0.0.0.0";
 const PORT = Number.parseInt(process.env.PORT ?? "8080", 10);
 const SERVICE_INFO_PATH = "/.well-known/schnick-schnack/service-info.json";
+const GITLAB_BASE_URL = process.env.GITLAB_BASE_URL ?? "https://labs.schnick-schnack.info";
+const GITLAB_GROUP_PATH = process.env.GITLAB_GROUP_PATH ?? "schnick-schnack";
+const GITLAB_TOKEN = optionalEnv("GITLAB_TOKEN") ?? optionalEnv("GITLAB_ACCESS_TOKEN") ?? optionalEnv("GLAB_TOKEN");
+const GITLAB_UPDATES_LOOKBACK_HOURS = Math.max(
+  1,
+  Number.parseInt(process.env.GITLAB_UPDATES_LOOKBACK_HOURS ?? "48", 10) || 48
+);
+const GITLAB_UPDATES_CACHE_MS = Math.max(
+  30000,
+  Number.parseInt(process.env.GITLAB_UPDATES_CACHE_MS ?? "300000", 10) || 300000
+);
+const GITLAB_UPDATES_LIMIT = Math.min(100, Math.max(1, Number.parseInt(process.env.GITLAB_UPDATES_LIMIT ?? "80", 10) || 80));
 const ROCKET_CHAT_URL = process.env.ROCKET_CHAT_URL ?? "https://slack.schnick-schnack.info";
 const ROCKET_CHAT_CHANNEL = process.env.ROCKET_CHAT_CHANNEL ?? "landing-feed";
 const ROCKET_CHAT_CHANNEL_URL =
@@ -447,6 +490,197 @@ async function mergeServiceFeeds(target: HealthTarget, result: ServiceInfoResult
   };
 }
 
+function publicServiceInfoUpdates(): PublicUpdate[] {
+  return Object.values(latestServiceInfo).flatMap((service) =>
+    (service.data?.sections ?? []).map((section) => ({
+      id: `${service.serviceId}-${section.id}`,
+      serviceId: service.serviceId,
+      date: service.data?.generatedAt ?? service.updatedAt ?? new Date().toISOString(),
+      title: section.title,
+      text: section.body,
+      href: service.data?.actions?.[0]?.href
+    }))
+  );
+}
+
+function sanitizeUpdateText(value: unknown, fallback = ""): string {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+
+  return value.replace(/\s+/g, " ").trim().slice(0, 180) || fallback;
+}
+
+function projectSlugFromMergeRequest(mergeRequest: GitLabMergeRequest): string {
+  const reference = mergeRequest.references?.full ?? mergeRequest.references?.relative ?? "";
+  const match = reference.match(/^schnick-schnack\/([^!]+)!/);
+  if (match?.[1]) {
+    return match[1];
+  }
+
+  if (mergeRequest.web_url) {
+    try {
+      const url = new URL(mergeRequest.web_url);
+      const parts = url.pathname.split("/").filter(Boolean);
+      const groupIndex = parts.findIndex((part) => part === GITLAB_GROUP_PATH);
+      const projectSlug = parts[groupIndex + 1];
+      if (groupIndex >= 0 && projectSlug) {
+        return projectSlug;
+      }
+    } catch {
+      return "gitlab";
+    }
+  }
+
+  return "gitlab";
+}
+
+function mergeRequestReference(mergeRequest: GitLabMergeRequest): string {
+  return (
+    mergeRequest.references?.full ??
+    mergeRequest.references?.relative ??
+    (mergeRequest.iid ? `${GITLAB_GROUP_PATH}/${projectSlugFromMergeRequest(mergeRequest)}!${mergeRequest.iid}` : "Merge Request")
+  );
+}
+
+function mergeRequestStateLabel(state: string | undefined): string {
+  if (state === "merged") {
+    return "wurde gemerged";
+  }
+
+  if (state === "opened") {
+    return "ist offen";
+  }
+
+  return "wurde aktualisiert";
+}
+
+function formatChangedFiles(value: string | number | null | undefined): string {
+  const count = typeof value === "number" ? value : Number.parseInt(value ?? "", 10);
+  if (!Number.isFinite(count) || count < 1) {
+    return "Änderungen sind enthalten.";
+  }
+
+  return count === 1 ? "1 Datei wurde geändert." : `${count} Dateien wurden geändert.`;
+}
+
+function normalizeMergeRequestUpdate(mergeRequest: GitLabMergeRequest): PublicUpdate | null {
+  if (mergeRequest.state === "closed" || String(mergeRequest.changes_count ?? "1") === "0") {
+    return null;
+  }
+
+  const serviceId = projectSlugFromMergeRequest(mergeRequest);
+  const date = mergeRequest.merged_at ?? mergeRequest.updated_at ?? mergeRequest.created_at;
+  const iid = mergeRequest.iid;
+  const projectId = mergeRequest.project_id;
+  const title = sanitizeUpdateText(mergeRequest.title, "Merge Request aktualisiert");
+
+  if (!date || !iid || !projectId) {
+    return null;
+  }
+
+  return {
+    id: `gitlab-${projectId}-${iid}`,
+    serviceId,
+    date,
+    title,
+    text: `${mergeRequestReference(mergeRequest)} ${mergeRequestStateLabel(mergeRequest.state)}. ${formatChangedFiles(
+      mergeRequest.changes_count
+    )}`,
+    href: mergeRequest.web_url
+  };
+}
+
+let gitLabUpdatesCache: { expiresAt: number; updates: PublicUpdate[] } = {
+  expiresAt: 0,
+  updates: []
+};
+
+async function fetchGitLabJson<T>(pathName: string, searchParams?: URLSearchParams): Promise<T | null> {
+  const url = new URL(pathName, GITLAB_BASE_URL);
+  if (searchParams) {
+    url.search = searchParams.toString();
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), INFO_TIMEOUT_MS);
+
+  try {
+    const headers: Record<string, string> = { accept: "application/json" };
+    if (GITLAB_TOKEN) {
+      headers["PRIVATE-TOKEN"] = GITLAB_TOKEN;
+    }
+
+    const response = await fetch(url, { headers, signal: controller.signal });
+    if (!response.ok) {
+      return null;
+    }
+
+    return (await response.json()) as T;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchGitLabMergeRequestDetails(mergeRequest: GitLabMergeRequest): Promise<GitLabMergeRequest | null> {
+  if (!mergeRequest.project_id || !mergeRequest.iid) {
+    return null;
+  }
+
+  return fetchGitLabJson<GitLabMergeRequest>(
+    `/api/v4/projects/${encodeURIComponent(String(mergeRequest.project_id))}/merge_requests/${mergeRequest.iid}`
+  );
+}
+
+async function fetchGitLabUpdates(): Promise<PublicUpdate[]> {
+  const now = Date.now();
+  if (now < gitLabUpdatesCache.expiresAt) {
+    return gitLabUpdatesCache.updates;
+  }
+
+  const updatedAfter = new Date(now - GITLAB_UPDATES_LOOKBACK_HOURS * 60 * 60 * 1000).toISOString();
+  const params = new URLSearchParams({
+    updated_after: updatedAfter,
+    state: "all",
+    order_by: "updated_at",
+    sort: "desc",
+    per_page: String(GITLAB_UPDATES_LIMIT)
+  });
+
+  const mergeRequests =
+    (await fetchGitLabJson<GitLabMergeRequest[]>(
+      `/api/v4/groups/${encodeURIComponent(GITLAB_GROUP_PATH)}/merge_requests`,
+      params
+    )) ?? [];
+
+  const details = await Promise.all(mergeRequests.slice(0, GITLAB_UPDATES_LIMIT).map(fetchGitLabMergeRequestDetails));
+  const updates = details
+    .filter((item): item is GitLabMergeRequest => item !== null)
+    .map(normalizeMergeRequestUpdate)
+    .filter((item): item is PublicUpdate => item !== null)
+    .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime());
+
+  gitLabUpdatesCache = {
+    expiresAt: now + GITLAB_UPDATES_CACHE_MS,
+    updates
+  };
+
+  return updates;
+}
+
+async function updateSnapshot(): Promise<UpdateSnapshot> {
+  const updates = [...publicServiceInfoUpdates(), ...(await fetchGitLabUpdates())].sort(
+    (left, right) => new Date(right.date).getTime() - new Date(left.date).getTime()
+  );
+
+  return {
+    generatedAt: new Date().toISOString(),
+    updates
+  };
+}
+
 async function fetchServiceInfo(target: HealthTarget): Promise<ServiceInfoResult> {
   if (!target.url) {
     return {
@@ -672,6 +906,10 @@ app.get("/api/service-info/:serviceId", (request, response) => {
   response.json(serviceInfo);
 });
 
+app.get("/api/updates", async (_request, response) => {
+  response.json(await updateSnapshot());
+});
+
 app.get("/api/design-preferences", (_request, response) => {
   response.json({
     defaults: {
@@ -762,10 +1000,49 @@ const openApiDocument = {
           }
         }
       }
+    },
+    "/api/updates": {
+      get: {
+        summary: "Aggregated public module updates",
+        description:
+          "Liefert Service-Info-Meldungen und GitLab-Merge-Requests der Gruppe schnick-schnack aus dem konfigurierten Zeitfenster.",
+        responses: {
+          "200": {
+            description: "Aggregated update feed",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/UpdateSnapshot" }
+              }
+            }
+          }
+        }
+      }
     }
   },
   components: {
     schemas: {
+      UpdateSnapshot: {
+        type: "object",
+        required: ["generatedAt", "updates"],
+        properties: {
+          generatedAt: { type: "string", format: "date-time" },
+          updates: { type: "array", items: { $ref: "#/components/schemas/PublicUpdate" } }
+        },
+        additionalProperties: false
+      },
+      PublicUpdate: {
+        type: "object",
+        required: ["id", "serviceId", "date", "title", "text"],
+        properties: {
+          id: { type: "string" },
+          serviceId: { type: "string" },
+          date: { type: "string", format: "date-time" },
+          title: { type: "string" },
+          text: { type: "string" },
+          href: { type: "string", format: "uri" }
+        },
+        additionalProperties: false
+      },
       ServiceInfo: {
         type: "object",
         required: ["schemaVersion", "serviceId", "generatedAt"],

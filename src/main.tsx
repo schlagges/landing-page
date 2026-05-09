@@ -136,6 +136,11 @@ type PublicUpdate = {
   href?: string;
 };
 
+type PublicUpdateSnapshot = {
+  generatedAt: string;
+  updates: PublicUpdate[];
+};
+
 type ViewTransitionDocument = Document & {
   startViewTransition?: (callback: () => void) => void;
 };
@@ -203,416 +208,6 @@ const navItems = [
   { id: "news", label: "News", icon: FileText }
 ] as const;
 
-const mergeRequestUpdates: PublicUpdate[] = [
-  {
-    id: "mr-openvoice-34",
-    serviceId: "openvoice",
-    date: "2026-05-08T19:58:34.557+02:00",
-    title: "OpenVoice UI-Redesign ohne Dummy-Buttons",
-    text: "schnick-schnack/openvoice!34 wurde gemerged und aktualisiert das OpenVoice-Redesign mit 1 geänderter Datei.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/34"
-  },
-  {
-    id: "mr-keycloak-14",
-    serviceId: "keycloak",
-    date: "2026-05-08T19:00:43.697+02:00",
-    title: "Keycloak Auto-Deploy läuft als luhzifer",
-    text: "schnick-schnack/keycloak!14 wurde gemerged und stellt den Auto-Deploy-Dienst von root auf luhzifer um. 3 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/keycloak/-/merge_requests/14"
-  },
-  {
-    id: "mr-openvoice-35",
-    serviceId: "openvoice",
-    date: "2026-05-08T17:59:22.938+02:00",
-    title: "OpenVoice UI-Cleanup umgesetzt",
-    text: "schnick-schnack/openvoice!35 wurde gemerged und entfernt nicht verdrahtete UI-Elemente. 5 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/35"
-  },
-  {
-    id: "mr-openvoice-33",
-    serviceId: "openvoice",
-    date: "2026-05-08T16:49:28.313+02:00",
-    title: "Workspace-Erstellung in OpenVoice korrigiert",
-    text: "schnick-schnack/openvoice!33 wurde gemerged und behebt die fehlerhafte Meldung 'Workspace name is already in use'. 1 Datei wurde geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/33"
-  },
-  {
-    id: "mr-keycloak-13",
-    serviceId: "keycloak",
-    date: "2026-05-08T16:06:12.596+02:00",
-    title: "Avatar-Funktion für Keycloak vorbereitet",
-    text: "schnick-schnack/keycloak!13 ist offen und bringt Avatar-Funktionalität mit 5 geänderten Dateien.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/keycloak/-/merge_requests/13"
-  },
-  {
-    id: "mr-phd-website-11",
-    serviceId: "phd-website",
-    date: "2026-05-08T16:03:13.419+02:00",
-    title: "PHD-Webseite nutzt wieder den Prod-Keycloak",
-    text: "schnick-schnack/phd-website!11 wurde gemerged und setzt den Keycloak-Default zurück auf Produktion. 1 Datei wurde geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/phd-website/-/merge_requests/11"
-  },
-  {
-    id: "mr-phd-website-10",
-    serviceId: "phd-website",
-    date: "2026-05-08T15:59:42.022+02:00",
-    title: "PHD-Portal modernisiert",
-    text: "schnick-schnack/phd-website!10 wurde gemerged und modernisiert das Portal-Layout. 3 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/phd-website/-/merge_requests/10"
-  },
-  {
-    id: "mr-openvoice-32",
-    serviceId: "openvoice",
-    date: "2026-05-08T15:56:52.241+02:00",
-    title: "OpenVoice Redesign-Iteration abgeschlossen",
-    text: "schnick-schnack/openvoice!32 wurde gemerged und arbeitet weiter am OpenVoice UI-Redesign. 5 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/32"
-  },
-  {
-    id: "mr-keycloak-12",
-    serviceId: "keycloak",
-    date: "2026-05-08T15:47:38.456+02:00",
-    title: "WebAuthn: alternativen Login-Weg ergänzen",
-    text: "schnick-schnack/keycloak!12 ist offen und ergänzt den 'Try another way'-Link. 1 Datei wurde geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/keycloak/-/merge_requests/12"
-  },
-  {
-    id: "mr-keycloak-11",
-    serviceId: "keycloak",
-    date: "2026-05-08T15:41:08.531+02:00",
-    title: "Keycloak-SSO Auto-Deploy eingerichtet",
-    text: "schnick-schnack/keycloak!11 wurde gemerged und richtet Auto-Deploy für Theme- und Realm-Änderungen ein. 9 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/keycloak/-/merge_requests/11"
-  },
-  {
-    id: "mr-keycloak-10",
-    serviceId: "keycloak",
-    date: "2026-05-08T15:35:37.405+02:00",
-    title: "WebAuthn-Template bekommt alternativen Weg",
-    text: "schnick-schnack/keycloak!10 ist offen und arbeitet am 'Try another way'-Link. 2 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/keycloak/-/merge_requests/10"
-  },
-  {
-    id: "mr-keycloak-9",
-    serviceId: "keycloak",
-    date: "2026-05-08T14:43:13.990+02:00",
-    title: "Keycloak-Theme für Auth-Flow-Seiten repariert",
-    text: "schnick-schnack/keycloak!9 wurde gemerged und behebt Default-Theme-Ausreißer bei OTP und Password-Update. 4 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/keycloak/-/merge_requests/9"
-  },
-  {
-    id: "mr-phd-website-7",
-    serviceId: "phd-website",
-    date: "2026-05-08T12:26:01.515+02:00",
-    title: "PHD Mobile-Layout für Metadaten und Rollenbadges",
-    text: "schnick-schnack/phd-website!7 ist offen und korrigiert mobile Listenmetadaten sowie Rollenbadges. 84 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/phd-website/-/merge_requests/7"
-  },
-  {
-    id: "mr-openvoice-22",
-    serviceId: "openvoice",
-    date: "2026-05-08T11:52:28.504+02:00",
-    title: "OpenVoice lädt öffentlichen Workspace für Keycloak-Sessions",
-    text: "schnick-schnack/openvoice!22 wurde gemerged und verbessert den Einstieg für bestehende Keycloak-Sessions. 3 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/22"
-  },
-  {
-    id: "mr-openvoice-31",
-    serviceId: "openvoice",
-    date: "2026-05-08T09:21:12.056+02:00",
-    title: "OpenVoice Server- und Docker-Konfiguration gehärtet",
-    text: "schnick-schnack/openvoice!31 wurde gemerged und prüft sowie härtet Server/Docker-Konfiguration. 10 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/31"
-  },
-  {
-    id: "mr-openvoice-21",
-    serviceId: "openvoice",
-    date: "2026-05-08T08:30:16.438+02:00",
-    title: "OpenVoice Mehrsprachigkeit erweitert",
-    text: "schnick-schnack/openvoice!21 wurde gemerged und ergänzt i18n-Unterstützung. 12 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/21"
-  },
-  {
-    id: "mr-openvoice-25",
-    serviceId: "openvoice",
-    date: "2026-05-08T08:10:02.077+02:00",
-    title: "Chat-Aktionen für Pin und Mehr korrigiert",
-    text: "schnick-schnack/openvoice!25 wurde gemerged und behebt nicht verdrahtete Chat-Buttons. 6 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/25"
-  },
-  {
-    id: "mr-keycloak-8",
-    serviceId: "keycloak",
-    date: "2026-05-08T07:52:39.557+02:00",
-    title: "Text-to-Schnack Berechtigung für schlagges",
-    text: "schnick-schnack/keycloak!8 wurde gemerged und berechtigt den User schlagges für Text-to-Schnack. 1 Datei wurde geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/keycloak/-/merge_requests/8"
-  },
-  {
-    id: "mr-openvoice-30",
-    serviceId: "openvoice",
-    date: "2026-05-08T04:02:22.148+02:00",
-    title: "Channel-Wechsel per Name repariert",
-    text: "schnick-schnack/openvoice!30 wurde gemerged und behebt den Channel-Wechsel für Workspace-Owner. 2 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/30"
-  },
-  {
-    id: "mr-openvoice-29",
-    serviceId: "openvoice",
-    date: "2026-05-08T04:00:49.827+02:00",
-    title: "Privaten Workspace ohne Dummy-Aktion entschärft",
-    text: "schnick-schnack/openvoice!29 wurde gemerged und verhindert irreführende Interaktion beim privaten Workspace. 2 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/29"
-  },
-  {
-    id: "mr-openvoice-28",
-    serviceId: "openvoice",
-    date: "2026-05-08T03:59:55.899+02:00",
-    title: "Preview- und Platzhalter-Buttons wirken nicht mehr interaktiv",
-    text: "schnick-schnack/openvoice!28 wurde gemerged und entschärft Dummy-Interaktionen in der UI. 3 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/28"
-  },
-  {
-    id: "mr-openvoice-27",
-    serviceId: "openvoice",
-    date: "2026-05-08T03:56:03.781+02:00",
-    title: "Teilnehmer-Karten-Menü verdrahtet",
-    text: "schnick-schnack/openvoice!27 wurde gemerged und behebt das Teilnehmer-Karten-Menü. 2 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/27"
-  },
-  {
-    id: "mr-openvoice-26",
-    serviceId: "openvoice",
-    date: "2026-05-08T03:54:59.717+02:00",
-    title: "Chat-Anhang-Button korrigiert",
-    text: "schnick-schnack/openvoice!26 wurde gemerged und behebt die Aktion für Chat-Anhänge. 2 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/26"
-  },
-  {
-    id: "mr-openvoice-24",
-    serviceId: "openvoice",
-    date: "2026-05-08T03:50:11.808+02:00",
-    title: "Topbar-Aktionen in OpenVoice bereinigt",
-    text: "schnick-schnack/openvoice!24 wurde gemerged und behebt No-op-Buttons für Audio, Mitglieder und Suche. 3 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/24"
-  },
-  {
-    id: "mr-openvoice-23",
-    serviceId: "openvoice",
-    date: "2026-05-08T03:48:16.437+02:00",
-    title: "Hilfe-Button in OpenVoice korrigiert",
-    text: "schnick-schnack/openvoice!23 wurde gemerged und behebt den Hilfe-Button ohne Aktion. 2 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/23"
-  },
-  {
-    id: "mr-phd-website-9",
-    serviceId: "phd-website",
-    date: "2026-05-08T03:45:54.876+02:00",
-    title: "PHD Legacy-Bilder ohne Mixed Content",
-    text: "schnick-schnack/phd-website!9 wurde gemerged und behebt externe Legacy-Bilder mit Mixed-Content- und Broken-Image-Fehlern. 4 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/phd-website/-/merge_requests/9"
-  },
-  {
-    id: "mr-phd-website-8",
-    serviceId: "phd-website",
-    date: "2026-05-08T03:38:32.119+02:00",
-    title: "PHD Antwort senden: 403",
-    text: "schnick-schnack/phd-website!8 ist offen und untersucht den 403 beim Senden von Antworten. 2 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/phd-website/-/merge_requests/8"
-  },
-  {
-    id: "mr-phd-website-6",
-    serviceId: "phd-website",
-    date: "2026-05-08T03:32:58.834+02:00",
-    title: "PHD Thread-Erstellung repariert",
-    text: "schnick-schnack/phd-website!6 wurde gemerged und behebt 403-Fehler beim Thread-Erstellen. 2 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/phd-website/-/merge_requests/6"
-  },
-  {
-    id: "mr-keycloak-7",
-    serviceId: "keycloak",
-    date: "2026-05-08T03:17:16.737+02:00",
-    title: "Fehlende Keycloak-Theme-Templates ergänzt",
-    text: "schnick-schnack/keycloak!7 wurde gemerged und ergänzt fehlende Templates im Keycloak-Theme. 21 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/keycloak/-/merge_requests/7"
-  },
-  {
-    id: "mr-openvoice-20",
-    serviceId: "openvoice",
-    date: "2026-05-08T03:20:08.052+02:00",
-    title: "OpenVoice OIDC Client-ID für Produktion gepinnt",
-    text: "schnick-schnack/openvoice!20 wurde gemerged und pinnt die Production OIDC Client-ID. 2 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/20"
-  },
-  {
-    id: "mr-phd-website-1",
-    serviceId: "phd-website",
-    date: "2026-05-08T02:30:32.664+02:00",
-    title: "PHD Galerie-Karten auf Mobile repariert",
-    text: "schnick-schnack/phd-website!1 wurde gemerged und verhindert, dass Galerie-Karten rechts aus dem Layout laufen. 4 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/phd-website/-/merge_requests/1"
-  },
-  {
-    id: "mr-openvoice-19",
-    serviceId: "openvoice",
-    date: "2026-05-08T02:13:42.453+02:00",
-    title: "OpenVoice Channels unter Workspaces verschachtelt",
-    text: "schnick-schnack/openvoice!19 wurde gemerged und ordnet Channels unter Workspaces ein. 22 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/19"
-  },
-  {
-    id: "mr-keycloak-6",
-    serviceId: "keycloak",
-    date: "2026-05-08T01:46:10.666+02:00",
-    title: "Text-to-Schnack lokal mit Keycloak nutzbar",
-    text: "schnick-schnack/keycloak!6 wurde gemerged und verbessert lokale Keycloak-Nutzung für Text-to-Schnack. 3 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/keycloak/-/merge_requests/6"
-  },
-  {
-    id: "mr-landing-page-4",
-    serviceId: "landing-page",
-    date: "2026-05-08T01:27:44.456+02:00",
-    title: "Landing Page Status-Button klarer benannt",
-    text: "schnick-schnack/landing-page!4 wurde gemerged und präzisiert den Status-Button. 2 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/landing-page/-/merge_requests/4"
-  },
-  {
-    id: "mr-keycloak-5",
-    serviceId: "keycloak",
-    date: "2026-05-08T01:26:39.072+02:00",
-    title: "PHD Prod-Keycloak finalisiert",
-    text: "schnick-schnack/keycloak!5 wurde gemerged und finalisiert den Prod-Keycloak für phd-clan.de. 1 Datei wurde geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/keycloak/-/merge_requests/5"
-  },
-  {
-    id: "mr-openvoice-18",
-    serviceId: "openvoice",
-    date: "2026-05-07T23:28:41.084+02:00",
-    title: "Persistiertes OpenVoice-Layout und globaler Workspace-Join repariert",
-    text: "schnick-schnack/openvoice!18 wurde gemerged und behebt Layout-Persistenz sowie globalen Workspace-Join. 2 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/18"
-  },
-  {
-    id: "mr-openvoice-17",
-    serviceId: "openvoice",
-    date: "2026-05-07T23:09:27.366+02:00",
-    title: "Hidden Sidebar Layout repariert",
-    text: "schnick-schnack/openvoice!17 wurde gemerged und behebt das versteckte Sidebar-Layout. 5 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/17"
-  },
-  {
-    id: "mr-openvoice-16",
-    serviceId: "openvoice",
-    date: "2026-05-07T20:35:28.717+02:00",
-    title: "Persisted Hidden Layout State korrigiert",
-    text: "schnick-schnack/openvoice!16 wurde gemerged und repariert persistierten versteckten Layout-State. 3 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/16"
-  },
-  {
-    id: "mr-keycloak-4",
-    serviceId: "keycloak",
-    date: "2026-05-07T20:34:37.598+02:00",
-    title: "Keycloak Token Claims für Text-to-Schnack geprüft",
-    text: "schnick-schnack/keycloak!4 wurde gemerged und prüft Token Claims für Text-to-Schnack. 3 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/keycloak/-/merge_requests/4"
-  },
-  {
-    id: "mr-openvoice-15",
-    serviceId: "openvoice",
-    date: "2026-05-07T18:12:52.779+02:00",
-    title: "Preview-Daten aus Production Shell entfernt",
-    text: "schnick-schnack/openvoice!15 wurde gemerged und blendet Preview-Daten in Produktion aus. 3 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/15"
-  },
-  {
-    id: "mr-openvoice-14",
-    serviceId: "openvoice",
-    date: "2026-05-07T17:51:59.413+02:00",
-    title: "OpenVoice Production Health Checks gehärtet",
-    text: "schnick-schnack/openvoice!14 wurde gemerged und härtet Production Deploy Health Checks. 1 Datei wurde geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/14"
-  },
-  {
-    id: "mr-openvoice-13",
-    serviceId: "openvoice",
-    date: "2026-05-07T17:11:33.446+02:00",
-    title: "Weitere OpenVoice UI-Aktionen verdrahtet",
-    text: "schnick-schnack/openvoice!13 wurde gemerged und trägt weitere UI-Action-Fixes nach. 12 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/13"
-  },
-  {
-    id: "mr-openvoice-12",
-    serviceId: "openvoice",
-    date: "2026-05-07T17:11:33.592+02:00",
-    title: "OpenVoice UI-Review-Agent in CI verdrahtet",
-    text: "schnick-schnack/openvoice!12 wurde gemerged und bindet den UI-Review-Agent in CI ein. 3 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/12"
-  },
-  {
-    id: "mr-landing-page-3",
-    serviceId: "landing-page",
-    date: "2026-05-07T16:44:29.556+02:00",
-    title: "Landing Page UI-Review-Gate aktiviert",
-    text: "schnick-schnack/landing-page!3 wurde gemerged und aktiviert das UI-Review-Gate. 18 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/landing-page/-/merge_requests/3"
-  },
-  {
-    id: "mr-openvoice-7",
-    serviceId: "openvoice",
-    date: "2026-05-07T16:02:12.448+02:00",
-    title: "OpenVoice Insta-Join beim Serverbeitritt behoben",
-    text: "schnick-schnack/openvoice!7 wurde gemerged und behebt Insta-Join-Verhalten beim Serverbeitritt. 3 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/7"
-  },
-  {
-    id: "mr-openvoice-11",
-    serviceId: "openvoice",
-    date: "2026-05-07T16:01:33.730+02:00",
-    title: "OpenVoice UI-Review und Keycloak-Smoke-Checks",
-    text: "schnick-schnack/openvoice!11 wurde gemerged und ergänzt UI-Review sowie Keycloak-Smoke-Checks. 28 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/11"
-  },
-  {
-    id: "mr-openvoice-4",
-    serviceId: "openvoice",
-    date: "2026-05-07T15:42:04.467+02:00",
-    title: "TURNS-Fallback auf Port 5349 repariert",
-    text: "schnick-schnack/openvoice!4 wurde gemerged und behebt den TURNS-Fallback. 6 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/4"
-  },
-  {
-    id: "mr-keycloak-3",
-    serviceId: "keycloak",
-    date: "2026-05-07T15:17:57.933+02:00",
-    title: "Keycloak-Realm für PHD-Webseite vorbereitet",
-    text: "schnick-schnack/keycloak!3 wurde gemerged und bereitet den Realm für die PHD-Webseite vor. 3 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/keycloak/-/merge_requests/3"
-  },
-  {
-    id: "mr-openvoice-10",
-    serviceId: "openvoice",
-    date: "2026-05-07T15:17:13.609+02:00",
-    title: "OpenVoice Workspace-Layout an Referenz angepasst",
-    text: "schnick-schnack/openvoice!10 wurde gemerged und richtet das Workspace-Layout an der Referenz aus. 9 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/10"
-  },
-  {
-    id: "mr-openvoice-9",
-    serviceId: "openvoice",
-    date: "2026-05-07T11:44:26.421+02:00",
-    title: "OpenVoice Workspace-Layout verfeinert",
-    text: "schnick-schnack/openvoice!9 wurde gemerged und verfeinert das globale Shell-/Workspace-Layout. 3 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/9"
-  },
-  {
-    id: "mr-openvoice-8",
-    serviceId: "openvoice",
-    date: "2026-05-07T10:45:25.292+02:00",
-    title: "Coturn Production Deploy gehärtet",
-    text: "schnick-schnack/openvoice!8 wurde gemerged und härtet Coturn für Produktion. 33 Dateien wurden geändert.",
-    href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/8"
-  }
-];
 
 function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -949,23 +544,6 @@ function chartPoints(serviceInfo: ServiceInfoResult | undefined): number[] | nul
   return chart.points.map((point) => point.value).slice(-16);
 }
 
-function publicUpdates(snapshot: ServiceInfoSnapshot | null): PublicUpdate[] {
-  return (
-    snapshot?.services
-      .flatMap((service) =>
-        (service.data?.sections ?? []).map((section) => ({
-          id: `${service.serviceId}-${section.id}`,
-          serviceId: service.serviceId,
-          date: service.data?.generatedAt ?? service.updatedAt ?? snapshot.generatedAt,
-          title: section.title,
-          text: section.body,
-          href: service.data?.actions?.[0]?.href
-        }))
-      )
-      .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime()) ?? []
-  );
-}
-
 function averageResponse(services: PublicService[]): number | null {
   const responseTimes = services
     .map((service) => service.responseMs)
@@ -1091,6 +669,41 @@ function useServiceInfo(): ServiceInfoSnapshot | null {
   }, []);
 
   return snapshot;
+}
+
+function usePublicUpdates(): PublicUpdate[] {
+  const [updates, setUpdates] = useState<PublicUpdate[]>([]);
+
+  useEffect(() => {
+    let closed = false;
+
+    async function loadUpdates() {
+      try {
+        const response = await fetch("/api/updates", { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error("Updates unavailable");
+        }
+        const data = (await response.json()) as PublicUpdateSnapshot;
+        if (!closed) {
+          setUpdates(Array.isArray(data.updates) ? data.updates : []);
+        }
+      } catch {
+        if (!closed) {
+          setUpdates([]);
+        }
+      }
+    }
+
+    void loadUpdates();
+    const timer = window.setInterval(loadUpdates, HEALTH_REFRESH_MS);
+
+    return () => {
+      closed = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  return updates;
 }
 
 function useBuildInfo(): BuildInfo | null {
@@ -2125,6 +1738,7 @@ function App() {
   const { snapshot, socketState } = useHealth();
   const buildInfo = useBuildInfo();
   const serviceInfo = useServiceInfo();
+  const updates = usePublicUpdates();
   const isMobile = useIsMobile();
   const [activeTheme, setActiveTheme] = useState<ThemeId>(() => applyInitialTheme());
   const [activeSection, setActiveSection] = useState<NavSection>(() => initialSection());
@@ -2140,13 +1754,6 @@ function App() {
   );
   const slackService = visibleServices.find((service) => service.id === "slack");
   const slackFeed = serviceInfoById.get("slack")?.data?.feeds?.[0];
-  const updates = useMemo(
-    () =>
-      [...publicUpdates(serviceInfo), ...mergeRequestUpdates].sort(
-        (left, right) => new Date(right.date).getTime() - new Date(left.date).getTime()
-      ),
-    [serviceInfo]
-  );
   const onlineCount = activeServices.filter((service) => service.state === "online").length;
 
   function changeTheme(theme: ThemeId) {

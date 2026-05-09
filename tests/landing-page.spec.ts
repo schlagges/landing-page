@@ -6,6 +6,9 @@ test("service info OpenAPI and aggregation endpoints are available", async ({ pa
   const openApi = await openApiResponse.json();
   expect(openApi.openapi).toBe("3.1.0");
   expect(openApi.paths["/.well-known/schnick-schnack/service-info.json"]).toBeTruthy();
+  expect(openApi.paths["/api/updates"]).toBeTruthy();
+  expect(openApi.components.schemas.UpdateSnapshot).toBeTruthy();
+  expect(openApi.components.schemas.PublicUpdate).toBeTruthy();
   expect(openApi.components.schemas.ServiceFeed).toBeTruthy();
   expect(openApi.components.schemas.ServiceInfo.properties.feeds).toBeTruthy();
 
@@ -23,6 +26,12 @@ test("service info OpenAPI and aggregation endpoints are available", async ({ pa
   expect(serviceInfo.services.some((service: { serviceId: string }) => service.serviceId === "schnack-to-text")).toBe(true);
   expect(serviceInfo.services.some((service: { serviceId: string }) => service.serviceId === "llm-hub")).toBe(true);
   expect(serviceInfo.services.some((service: { serviceId: string }) => service.serviceId === "gitlab")).toBe(true);
+
+  const updatesResponse = await page.request.get("/api/updates");
+  expect(updatesResponse.ok()).toBe(true);
+  const updates = await updatesResponse.json();
+  expect(typeof updates.generatedAt).toBe("string");
+  expect(Array.isArray(updates.updates)).toBe(true);
 
   const healthResponse = await page.request.get("/api/health");
   expect(healthResponse.ok()).toBe(true);
@@ -111,6 +120,25 @@ test("login link preserves current section and existing login state", async ({ p
 });
 
 test("news page lists recent module merge requests with dates", async ({ page }) => {
+  await page.route("**/api/updates", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        generatedAt: "2026-05-09T00:00:00.000Z",
+        updates: [
+          {
+            id: "gitlab-2-34",
+            serviceId: "openvoice",
+            date: "2026-05-08T19:58:34.557+02:00",
+            title: "OpenVoice UI-Redesign ohne Dummy-Buttons",
+            text: "schnick-schnack/openvoice!34 wurde gemerged. 1 Datei wurde geändert.",
+            href: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/34"
+          }
+        ]
+      })
+    });
+  });
+
   await page.goto("/?section=news");
 
   await expect(page.getByRole("heading", { name: "Was gerade passiert" })).toBeVisible();
