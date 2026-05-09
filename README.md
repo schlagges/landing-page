@@ -22,7 +22,7 @@ Standardpfad lokal:
 data/landing-page.sqlite
 ```
 
-Im Container wird der Pfad über `PORTAL_DB_PATH` gesetzt und durch `./data:/app/data` persistent gehalten. `SQLITE_DB_PATH` bleibt als Legacy-Fallback für bestehende lokale Umgebungen unterstützt.
+Im Container wird der Pfad über `PORTAL_DB_PATH` gesetzt und durch `./data:/app/data` persistent gehalten. `SQLITE_DB_PATH` bleibt als Legacy-Fallback unterstützt; Docker Compose übernimmt den Wert, wenn `PORTAL_DB_PATH` nicht gesetzt ist.
 
 ## Betrieb
 
