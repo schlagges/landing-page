@@ -22,7 +22,7 @@ Standardpfad lokal:
 data/landing-page.sqlite
 ```
 
-Im Container wird der Pfad über `SQLITE_DB_PATH` gesetzt und durch `./data:/app/data` persistent gehalten.
+Im Container wird der Pfad über `PORTAL_DB_PATH` gesetzt und durch `./data:/app/data` persistent gehalten. `SQLITE_DB_PATH` bleibt als Legacy-Fallback für bestehende lokale Umgebungen unterstützt.
 
 ## Betrieb
 
@@ -43,10 +43,11 @@ POST /api/gitlab/events
 Vor dem Start muss `GITLAB_WEBHOOK_SECRET` per `.env` oder Umgebung gesetzt werden:
 
 ```bash
+GITLAB_BASE_URL=https://labs.schnick-schnack.info
 GITLAB_WEBHOOK_SECRET=...
 ```
 
-Der Header `X-Gitlab-Token` muss diesem Wert entsprechen. Ohne gesetztes Secret ist der Webhook deaktiviert und antwortet mit `503`. Der Server dedupliziert Ereignisse über eine externe Event-ID aus GitLab-Projekt und Event-Kennung, zum Beispiel Merge-Request-IID oder Tag-Name. Wiederholte Webhook-Zustellungen erzeugen keine doppelten News.
+`GITLAB_BASE_URL` definiert den erlaubten GitLab-Ursprung für veröffentlichte Links. Der Header `X-Gitlab-Token` muss `GITLAB_WEBHOOK_SECRET` entsprechen. Ohne gesetztes Secret ist der Webhook deaktiviert und antwortet mit `503`. Der Server dedupliziert Ereignisse über eine externe Event-ID aus GitLab-Projekt und Event-Kennung, zum Beispiel Merge-Request-IID oder Tag-Name. Wiederholte Webhook-Zustellungen erzeugen keine doppelten News.
 
 Unsichere oder Cross-Origin-URLs werden nicht veröffentlicht. Release- und Tag-Delete-Events werden ignoriert.
 

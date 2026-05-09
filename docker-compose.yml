@@ -37,7 +37,7 @@ services:
       GITLAB_UPDATES_LOOKBACK_HOURS: ${GITLAB_UPDATES_LOOKBACK_HOURS:-48}
       GITLAB_UPDATES_CACHE_MS: ${GITLAB_UPDATES_CACHE_MS:-300000}
       GITLAB_UPDATES_LIMIT: ${GITLAB_UPDATES_LIMIT:-80}
-      SQLITE_DB_PATH: ${SQLITE_DB_PATH:-/app/data/landing-page.sqlite}
+      PORTAL_DB_PATH: ${PORTAL_DB_PATH:-/app/data/landing-page.sqlite}
       ROLE_REQUEST_CHANNEL: ${ROLE_REQUEST_CHANNEL:-keycloak-admins}
       ROLE_REQUEST_CHANNEL_URL: ${ROLE_REQUEST_CHANNEL_URL:-https://slack.schnick-schnack.info/channel/keycloak-admins}
       ROCKET_CHAT_URL: ${ROCKET_CHAT_URL:-http://127.0.0.1:3010/}

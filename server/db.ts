@@ -6,7 +6,9 @@ const DEFAULT_DB_PATH = path.resolve("data", "landing-page.sqlite");
 
 export type Database = DatabaseSync;
 
-export function openDatabase(dbPath = process.env.SQLITE_DB_PATH ?? DEFAULT_DB_PATH): Database {
+export function openDatabase(
+  dbPath = process.env.PORTAL_DB_PATH ?? process.env.SQLITE_DB_PATH ?? DEFAULT_DB_PATH,
+): Database {
   mkdirSync(path.dirname(dbPath), { recursive: true });
   const db = new DatabaseSync(dbPath);
   db.exec("PRAGMA journal_mode = WAL;");
