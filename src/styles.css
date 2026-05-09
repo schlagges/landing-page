@@ -529,6 +529,37 @@ html[data-theme="light"] .page-header {
   padding: 14px;
 }
 
+.portal-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-block: 0;
+}
+
+.portal-summary > div {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.portal-summary span {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.portal-summary strong {
+  display: block;
+  margin-top: 6px;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 1.1rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .overview-metrics div,
 .channel-meta div {
   display: grid;
@@ -588,7 +619,7 @@ html[data-theme="light"] .page-header {
 .admin-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 16px;
   min-height: 0;
 }
 
@@ -597,10 +628,10 @@ html[data-theme="light"] .page-header {
   align-content: start;
   gap: 10px;
   min-width: 0;
-  padding: 14px;
+  padding: 16px;
   border: 1px solid var(--border);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.035);
+  border-radius: 8px;
+  background: var(--panel);
 }
 
 .admin-panel h3 {
@@ -613,12 +644,10 @@ html[data-theme="light"] .page-header {
 .request-row,
 .news-row {
   display: grid;
-  gap: 5px;
+  gap: 4px;
   min-width: 0;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
+  padding-block: 10px;
+  border-top: 1px solid var(--border);
 }
 
 .request-row {
@@ -646,7 +675,7 @@ html[data-theme="light"] .page-header {
 .news-row span {
   overflow: hidden;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 0.85rem;
   line-height: 1.3;
   text-overflow: ellipsis;
 }
@@ -1772,6 +1801,7 @@ html[data-theme="light"] .page-header {
   }
 
   .overview-metrics,
+  .portal-summary,
   .system-detail-grid,
   .status-service-grid,
   .channel-layout,

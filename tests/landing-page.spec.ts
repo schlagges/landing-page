@@ -224,6 +224,14 @@ test("desktop renders the Schnick Schnack app layout from the reference", async 
   await expect(page.locator(".status-dashboard").getByText("Systemstatus")).toBeVisible();
 });
 
+test("overview presents hybrid portal summary", async ({ page }) => {
+  await page.goto("/?roles=voice");
+  await expect(page.getByText("Gesamtstatus")).toBeVisible();
+  await expect(page.getByText("Eigene Anfragen")).toBeVisible();
+  await expect(page.getByText("Neue Modulnews")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Verfügbare Dienste" })).toBeVisible();
+});
+
 test("left navigation changes the active section", async ({ page }) => {
   await page.goto("/");
 

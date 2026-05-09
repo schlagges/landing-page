@@ -1574,6 +1574,35 @@ function OverviewMetrics({
   );
 }
 
+function PortalSummary({
+  roleRequests,
+  snapshot,
+  updates
+}: {
+  roleRequests: RoleRequest[];
+  snapshot: HealthSnapshot | null;
+  updates: PublicUpdate[];
+}) {
+  const requestedCount = roleRequests.filter((request) => roleRequestState(request) === "requested").length;
+
+  return (
+    <div className="portal-summary" aria-label="Portalübersicht">
+      <div>
+        <span>Gesamtstatus</span>
+        <strong>{snapshot ? overallLabels[snapshot.overall] : "Status wird geprüft"}</strong>
+      </div>
+      <div>
+        <span>Eigene Anfragen</span>
+        <strong>{requestedCount}</strong>
+      </div>
+      <div>
+        <span>Neue Modulnews</span>
+        <strong>{updates.length}</strong>
+      </div>
+    </div>
+  );
+}
+
 function MetricGrid({ metrics }: { metrics: ServiceMetric[] }) {
   return (
     <div className="detail-metric-grid" aria-label="Service-Metriken">
@@ -1739,6 +1768,7 @@ function OverviewView({
   return (
     <div className="page-view">
       <PageHeader eyebrow="Cockpit" title="Übersicht" />
+      <PortalSummary roleRequests={roleRequests} snapshot={snapshot} updates={updates} />
       <OverviewMetrics buildInfo={buildInfo} feed={feed} serviceInfo={serviceInfo} snapshot={snapshot} />
       <SystemsPanel
         activeSection={activeSection}
@@ -2117,6 +2147,7 @@ function MobilePage({
 }) {
   return (
     <div className="page-view page-view--mobile">
+      <PortalSummary roleRequests={roleRequests} snapshot={snapshot} updates={updates} />
       <OverviewMetrics buildInfo={buildInfo} feed={feed} serviceInfo={serviceInfo} snapshot={snapshot} />
       <SystemsPanel
         activeSection={activeSection}
