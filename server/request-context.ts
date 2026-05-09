@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 export type RequestContext = {
   requester: string;
   roles: Set<string>;
+  trustedRoles: Set<string>;
   isAdmin: boolean;
 };
 
@@ -30,9 +31,12 @@ function sanitizeIdentity(value: unknown, fallback: string): string {
 }
 
 export function requestContext(request: Request): RequestContext {
+  const trustedRoles = new Set<string>();
+  addDelimitedRoles(trustedRoles, request.headers["x-schnick-schnack-roles"] as string | undefined);
+  addDelimitedRoles(trustedRoles, request.headers["x-forwarded-roles"] as string | undefined);
+
   const roles = new Set<string>();
-  addDelimitedRoles(roles, request.headers["x-schnick-schnack-roles"] as string | undefined);
-  addDelimitedRoles(roles, request.headers["x-forwarded-roles"] as string | undefined);
+  trustedRoles.forEach((role) => roles.add(role));
   addDelimitedRoles(roles, typeof request.query.roles === "string" ? request.query.roles : undefined);
 
   const requester = sanitizeIdentity(
@@ -43,7 +47,8 @@ export function requestContext(request: Request): RequestContext {
   return {
     requester,
     roles,
-    isAdmin: Array.from(roles).some((role) => ADMIN_ROLES.has(role))
+    trustedRoles,
+    isAdmin: Array.from(trustedRoles).some((role) => ADMIN_ROLES.has(role))
   };
 }
 

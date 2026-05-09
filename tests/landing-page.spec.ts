@@ -81,6 +81,10 @@ test("admin role request endpoint requires an admin role", async ({ page }) => {
   expect(denied.status()).toBe(403);
   expect(await denied.json()).toEqual({ message: "Admin role required." });
 
+  const queryRoleDenied = await page.request.get("/api/admin/role-requests?roles=portal-admin");
+  expect(queryRoleDenied.status()).toBe(403);
+  expect(await queryRoleDenied.json()).toEqual({ message: "Admin role required." });
+
   const allowed = await page.request.get("/api/admin/role-requests", {
     headers: { "x-schnick-schnack-roles": "portal-admin" }
   });
