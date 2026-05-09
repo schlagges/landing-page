@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { openDatabase } from "./db.js";
 import { insertMonitoringSamples, monitoringHistory } from "./monitoring-history.js";
+import { listModuleNews, normalizeGitLabEvent, saveModuleNews } from "./module-news.js";
 import {
   createRoleRequest,
   listPublicRoleRequests,
@@ -699,7 +700,7 @@ async function fetchGitLabUpdates(): Promise<PublicUpdate[]> {
 }
 
 async function updateSnapshot(): Promise<UpdateSnapshot> {
-  const updates = [...publicServiceInfoUpdates(), ...(await fetchGitLabUpdates())].sort(
+  const updates = [...storedModuleNewsUpdates(), ...publicServiceInfoUpdates(), ...(await fetchGitLabUpdates())].sort(
     (left, right) => new Date(right.date).getTime() - new Date(left.date).getTime()
   );
 
@@ -707,6 +708,17 @@ async function updateSnapshot(): Promise<UpdateSnapshot> {
     generatedAt: new Date().toISOString(),
     updates
   };
+}
+
+function storedModuleNewsUpdates(): PublicUpdate[] {
+  return listModuleNews(db, 30).map((item) => ({
+    id: item.id,
+    serviceId: item.projectName.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+    date: item.eventAt,
+    title: item.title,
+    text: `${item.projectName}: ${item.eventType === "merge" ? "Merge Event" : item.eventType === "tag" ? "Tag" : "Release"} veröffentlicht.`,
+    href: item.url ?? undefined
+  }));
 }
 
 function findService(serviceId: string): Pick<PublicService, "id" | "name" | "requiredRole"> | undefined {
@@ -1006,7 +1018,17 @@ app.get("/api/monitoring/history", (_request, response) => {
 });
 
 app.get("/api/module-news", (_request, response) => {
-  response.json({ generatedAt: new Date().toISOString(), news: [] });
+  response.json({ generatedAt: new Date().toISOString(), news: listModuleNews(db) });
+});
+
+app.post("/api/gitlab/events", (request, response) => {
+  const normalized = normalizeGitLabEvent(request.body);
+  if (!normalized) {
+    response.status(202).json({ message: "Ignored GitLab event." });
+    return;
+  }
+
+  response.json(saveModuleNews(db, normalized));
 });
 
 app.get("/api/role-requests", (_request, response) => {

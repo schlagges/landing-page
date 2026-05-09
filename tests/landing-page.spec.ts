@@ -229,6 +229,38 @@ test("news page lists recent module merge requests with dates", async ({ page })
   );
 });
 
+test("gitlab events are deduplicated into module news", async ({ page }) => {
+  const payload = {
+    object_kind: "merge_request",
+    event_type: "merge_request",
+    project: {
+      id: 42,
+      name: "OpenVoice",
+      web_url: "https://labs.schnick-schnack.info/schnick-schnack/openvoice"
+    },
+    object_attributes: {
+      iid: 34,
+      state: "merged",
+      title: "OpenVoice UI-Redesign ohne Dummy-Buttons",
+      url: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/merge_requests/34",
+      updated_at: "2026-05-08T19:58:34.557+02:00"
+    }
+  };
+
+  const first = await page.request.post("/api/gitlab/events", { data: payload });
+  expect(first.ok()).toBe(true);
+  expect((await first.json()).news.eventType).toBe("merge");
+
+  const second = await page.request.post("/api/gitlab/events", { data: payload });
+  expect(second.ok()).toBe(true);
+  expect((await second.json()).created).toBe(false);
+
+  const list = await page.request.get("/api/module-news");
+  const body = await list.json();
+  const matches = body.news.filter((item: { externalEventId: string }) => item.externalEventId === "gitlab:merge:42:34");
+  expect(matches).toHaveLength(1);
+});
+
 test("side navigation opens detailed status and channel views", async ({ page }) => {
   await page.goto("/");
 
