@@ -88,7 +88,7 @@ export function createRoleRequest(
 
   const id = roleRequestId(service.id, service.requiredRole, requester);
   const existing = db.prepare("SELECT * FROM role_requests WHERE id = ?").get(id) as RoleRequestRow | undefined;
-  if (existing?.status === "requested") {
+  if (existing) {
     return { request: mapRoleRequest(existing), created: false };
   }
 

@@ -327,6 +327,20 @@ test("role requests can be created and reviewed through sqlite APIs", async ({ p
   expect(created.request.status).toBe("requested");
   expect(created.request.reason).toBe("Ich brauche Transkription für Projektmeetings.");
 
+  const duplicate = await page.request.post("/api/role-requests", {
+    data: {
+      serviceId: "schnack-to-text",
+      reason: "Doppelte Anfrage.",
+      source: "playwright"
+    },
+    headers: { "x-schnick-schnack-user": "boris" }
+  });
+  expect(duplicate.status()).toBe(200);
+  const duplicated = await duplicate.json();
+  expect(duplicated.request.id).toBe(created.request.id);
+  expect(duplicated.request.status).toBe("requested");
+  expect(duplicated.request.reason).toBe("Ich brauche Transkription für Projektmeetings.");
+
   const mine = await page.request.get("/api/role-requests/me", {
     headers: { "x-schnick-schnack-user": "boris" }
   });
@@ -338,18 +352,23 @@ test("role requests can be created and reviewed through sqlite APIs", async ({ p
     headers: { "x-schnick-schnack-user": "admin", "x-schnick-schnack-roles": "portal-admin" }
   });
   expect(approve.ok()).toBe(true);
-  expect((await approve.json()).request.status).toBe("approved");
+  const approved = await approve.json();
+  expect(approved.request.status).toBe("approved");
 
-  const reopen = await page.request.post("/api/role-requests", {
+  const approvedCreate = await page.request.post("/api/role-requests", {
     data: {
       serviceId: "schnack-to-text",
-      reason: "Ich brauche wieder Transkription.",
+      reason: "Ich brauche wieder Transkription, obwohl schon entschieden wurde.",
       source: "playwright"
     },
     headers: { "x-schnick-schnack-user": "boris" }
   });
-  expect(reopen.status()).toBe(201);
-  expect((await reopen.json()).request.status).toBe("requested");
+  expect(approvedCreate.status()).toBe(200);
+  const approvedCreateBody = await approvedCreate.json();
+  expect(approvedCreateBody.request.id).toBe(created.request.id);
+  expect(approvedCreateBody.request.status).toBe("approved");
+  expect(approvedCreateBody.request.reviewer).toBe("admin");
+  expect(approvedCreateBody.request.reviewedAt).toBe(approved.request.reviewedAt);
 
   const rejectCreate = await page.request.post("/api/role-requests", {
     data: { serviceId: "gitlab", reason: "Code lesen.", source: "playwright" },
@@ -360,7 +379,19 @@ test("role requests can be created and reviewed through sqlite APIs", async ({ p
     headers: { "x-schnick-schnack-user": "admin", "x-schnick-schnack-roles": "portal-admin" }
   });
   expect(reject.ok()).toBe(true);
-  expect((await reject.json()).request.status).toBe("rejected");
+  const rejected = await reject.json();
+  expect(rejected.request.status).toBe("rejected");
+
+  const rejectedCreate = await page.request.post("/api/role-requests", {
+    data: { serviceId: "gitlab", reason: "Noch einmal Code lesen.", source: "playwright" },
+    headers: { "x-schnick-schnack-user": "boris" }
+  });
+  expect(rejectedCreate.status()).toBe(200);
+  const rejectedCreateBody = await rejectedCreate.json();
+  expect(rejectedCreateBody.request.id).toBe(rejectCreated.request.id);
+  expect(rejectedCreateBody.request.status).toBe("rejected");
+  expect(rejectedCreateBody.request.reviewer).toBe("admin");
+  expect(rejectedCreateBody.request.reviewedAt).toBe(rejected.request.reviewedAt);
 });
 
 test("global chat and system status remain persistent dashboard areas", async ({ page }) => {

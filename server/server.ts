@@ -1025,17 +1025,19 @@ app.post("/api/role-requests", async (request, response) => {
   const source = typeof body.source === "string" ? sanitizeUpdateText(body.source, "landing-page").slice(0, 180) : "landing-page";
   const result = createRoleRequest(db, service, context.requester, reason, source);
 
-  void postRoleRequestToRocketChat({
-    id: result.request.id,
-    serviceId: result.request.serviceId,
-    serviceName: result.request.serviceName,
-    role: result.request.requiredRole,
-    state: result.request.status,
-    requester: result.request.requester,
-    source: result.request.source,
-    createdAt: result.request.createdAt,
-    updatedAt: result.request.updatedAt
-  });
+  if (result.created) {
+    void postRoleRequestToRocketChat({
+      id: result.request.id,
+      serviceId: result.request.serviceId,
+      serviceName: result.request.serviceName,
+      role: result.request.requiredRole,
+      state: result.request.status,
+      requester: result.request.requester,
+      source: result.request.source,
+      createdAt: result.request.createdAt,
+      updatedAt: result.request.updatedAt
+    });
+  }
 
   response.status(result.created ? 201 : 200).json({ request: result.request, channel: ROLE_REQUEST_CHANNEL_URL });
 });
