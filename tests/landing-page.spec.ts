@@ -131,6 +131,20 @@ test("admin role request endpoint requires an admin role", async ({ page }) => {
   expect(Array.isArray(body.requests)).toBe(true);
 });
 
+test("admin area is hidden without admin role and visible with admin role", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Admin", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Adminbereich" })).toHaveCount(0);
+
+  await page.goto("/?roles=portal-admin");
+  await expect(page.getByRole("button", { name: "Admin", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Admin", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Adminbereich" })).toBeVisible();
+  await expect(page.getByText("Berechtigungsanfragen")).toBeVisible();
+  await expect(page.getByText("Monitoring-Verlauf")).toBeVisible();
+  await expect(page.getByText("Modulnews")).toBeVisible();
+});
+
 test("desktop renders the Schnick Schnack app layout from the reference", async ({ page }) => {
   await page.goto("/");
 

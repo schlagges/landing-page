@@ -24,13 +24,14 @@ type ServiceState = "online" | "degraded" | "offline" | "checking" | "planned";
 type ServiceCategory = "communication" | "identity" | "development" | "ai" | "roadmap";
 type ServiceInfoState = "checking" | "available" | "unsupported" | "error" | "planned";
 type ThemeId = (typeof THEMES)[number]["id"];
-type NavSection = "overview" | "systems" | "channels" | "status" | "news";
+type NavSection = "overview" | "systems" | "channels" | "status" | "news" | "admin";
 type SocketState = "connecting" | "live" | "fallback";
 type RowTone = "green" | "blue" | "violet" | "amber";
 type LoginState = {
   name: string;
   value: string;
 };
+type RoleRequestState = "requested" | "approved" | "rejected";
 
 type UserAccess = {
   roles: Set<string>;
@@ -43,12 +44,15 @@ type RoleRequest = {
   serviceName: string;
   requiredRole?: string;
   role: string;
-  status?: "requested" | "approved" | "rejected";
-  state?: "requested" | "approved" | "rejected";
+  state: RoleRequestState;
+  status?: RoleRequestState;
   requester?: string;
+  reason?: string;
   source?: string;
+  reviewer?: string | null;
   createdAt?: string;
   updatedAt?: string;
+  reviewedAt?: string | null;
 };
 
 type RoleRequestSnapshot = {
@@ -78,6 +82,41 @@ type HealthSnapshot = {
   generatedAt: string;
   overall: Exclude<ServiceState, "planned">;
   services: PublicService[];
+};
+
+type MonitoringSample = {
+  id: number;
+  serviceId: string;
+  state: ServiceState;
+  message: string;
+  responseMs: number | null;
+  checkedAt: string;
+};
+
+type MonitoringHistorySnapshot = {
+  generatedAt: string;
+  services: Array<{
+    serviceId: string;
+    samples: MonitoringSample[];
+    incidents: MonitoringSample[];
+  }>;
+};
+
+type ModuleNews = {
+  id: string;
+  externalEventId: string;
+  projectId: string;
+  projectName: string;
+  eventType: "release" | "tag" | "merge";
+  title: string;
+  url: string | null;
+  eventAt: string;
+  createdAt: string;
+};
+
+type ModuleNewsSnapshot = {
+  generatedAt: string;
+  news: ModuleNews[];
 };
 
 type BuildInfo = {
@@ -187,6 +226,12 @@ const stateLabels: Record<ServiceState, string> = {
   planned: "Geplant"
 };
 
+const roleRequestStateLabels: Record<RoleRequestState, string> = {
+  approved: "Genehmigt",
+  rejected: "Abgelehnt",
+  requested: "Angefragt"
+};
+
 const overallLabels: Record<HealthSnapshot["overall"], string> = {
   checking: "Status wird geprüft",
   degraded: "Teilweise verfügbar",
@@ -223,7 +268,8 @@ const navItems = [
   { id: "systems", label: "Systeme", icon: SlidersHorizontal },
   { id: "channels", label: "Kanäle", icon: Hash },
   { id: "status", label: "Status", icon: CheckCircle2 },
-  { id: "news", label: "News", icon: FileText }
+  { id: "news", label: "News", icon: FileText },
+  { id: "admin", label: "Admin", icon: ShieldCheck }
 ] as const;
 
 
@@ -438,6 +484,10 @@ function loginHref(theme: ThemeId, section: NavSection, loginState: LoginState |
 
 function hasServiceRole(service: PublicService, access: UserAccess): boolean {
   return !service.requiredRole || access.roles.has(service.requiredRole);
+}
+
+function hasAdminRole(access: UserAccess): boolean {
+  return ["portal-admin", "admin", "keycloak-admin"].some((role) => access.roles.has(role));
 }
 
 function accessLabel(service: PublicService, access: UserAccess): string {
@@ -727,6 +777,76 @@ function usePublicUpdates(): PublicUpdate[] {
   return updates;
 }
 
+function useMonitoringHistory(): MonitoringHistorySnapshot | null {
+  const [snapshot, setSnapshot] = useState<MonitoringHistorySnapshot | null>(null);
+
+  useEffect(() => {
+    let closed = false;
+
+    async function loadHistory() {
+      try {
+        const response = await fetch("/api/monitoring/history", { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error("Monitoring history unavailable");
+        }
+        const data = (await response.json()) as MonitoringHistorySnapshot;
+        if (!closed) {
+          setSnapshot(data);
+        }
+      } catch {
+        if (!closed) {
+          setSnapshot(null);
+        }
+      }
+    }
+
+    void loadHistory();
+    const timer = window.setInterval(loadHistory, HEALTH_REFRESH_MS);
+
+    return () => {
+      closed = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  return snapshot;
+}
+
+function useModuleNews(): ModuleNews[] {
+  const [news, setNews] = useState<ModuleNews[]>([]);
+
+  useEffect(() => {
+    let closed = false;
+
+    async function loadNews() {
+      try {
+        const response = await fetch("/api/module-news", { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error("Module news unavailable");
+        }
+        const data = (await response.json()) as ModuleNewsSnapshot;
+        if (!closed) {
+          setNews(Array.isArray(data.news) ? data.news : []);
+        }
+      } catch {
+        if (!closed) {
+          setNews([]);
+        }
+      }
+    }
+
+    void loadNews();
+    const timer = window.setInterval(loadNews, HEALTH_REFRESH_MS);
+
+    return () => {
+      closed = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  return news;
+}
+
 function useRoleRequests() {
   const [requests, setRequests] = useState<RoleRequest[]>([]);
   const [pendingServiceId, setPendingServiceId] = useState<string | null>(null);
@@ -842,8 +962,9 @@ function useIsMobile(): boolean {
   return isMobile;
 }
 
-function StatusPill({ state }: { state: ServiceState }) {
-  return <span className={`status-pill status-${state}`}>{stateLabels[state]}</span>;
+function StatusPill({ state }: { state: ServiceState | RoleRequestState }) {
+  const label = state in stateLabels ? stateLabels[state as ServiceState] : roleRequestStateLabels[state as RoleRequestState];
+  return <span className={`status-pill status-${state}`}>{label}</span>;
 }
 
 function Wordmark() {
@@ -893,14 +1014,18 @@ function Sidebar({
   activeTheme,
   loginState,
   onSectionChange,
-  onThemeChange
+  onThemeChange,
+  userAccess
 }: {
   activeSection: NavSection;
   activeTheme: ThemeId;
   loginState: LoginState | null;
   onSectionChange: (section: NavSection) => void;
   onThemeChange: (theme: ThemeId) => void;
+  userAccess: UserAccess;
 }) {
+  const visibleNavItems = navItems.filter((item) => item.id !== "admin" || hasAdminRole(userAccess));
+
   return (
     <aside className="app-sidebar" aria-label="Schnick Schnack Navigation">
       <a className="brand-lockup" href="/" aria-label="schnick-schnack.info Startseite">
@@ -914,7 +1039,7 @@ function Sidebar({
       </a>
 
       <nav className="primary-nav" aria-label="Hauptnavigation">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeSection === item.id;
           return (
@@ -1753,6 +1878,57 @@ function NewsView({ updates }: { updates: PublicUpdate[] }) {
   );
 }
 
+function AdminSection({
+  history,
+  moduleNews,
+  roleRequests
+}: {
+  history: MonitoringHistorySnapshot | null;
+  moduleNews: ModuleNews[];
+  roleRequests: RoleRequest[];
+}) {
+  return (
+    <section className="content-section admin-section" aria-labelledby="admin-heading">
+      <div className="section-heading">
+        <span className="eyebrow">Admin</span>
+        <h2 id="admin-heading">Adminbereich</h2>
+        <p>Monitoring, Rollenfreigaben und automatisch veröffentlichte Modulmeldungen.</p>
+      </div>
+      <div className="admin-grid">
+        <article className="admin-panel">
+          <h3>Monitoring-Verlauf</h3>
+          {(history?.services ?? []).slice(0, 6).map((service) => (
+            <div className="history-row" key={service.serviceId}>
+              <strong>{service.serviceId}</strong>
+              <span>{service.samples.length} Messpunkte</span>
+              <span>{service.incidents.length} Auffälligkeiten</span>
+            </div>
+          ))}
+        </article>
+        <article className="admin-panel">
+          <h3>Berechtigungsanfragen</h3>
+          {roleRequests.slice(0, 8).map((request) => (
+            <div className="request-row" key={request.id ?? `${request.serviceId}-${request.role}`}>
+              <strong>{request.serviceName}</strong>
+              <span>{request.requester ?? "Öffentlich"}</span>
+              <StatusPill state={request.status ?? request.state} />
+            </div>
+          ))}
+        </article>
+        <article className="admin-panel">
+          <h3>Modulnews</h3>
+          {moduleNews.slice(0, 8).map((item) => (
+            <div className="news-row" key={item.id}>
+              <strong>{item.projectName}</strong>
+              <span>{item.title}</span>
+            </div>
+          ))}
+        </article>
+      </div>
+    </section>
+  );
+}
+
 function ActivePage({
   activeSection,
   buildInfo,
@@ -1895,6 +2071,8 @@ function App() {
   const buildInfo = useBuildInfo();
   const serviceInfo = useServiceInfo();
   const updates = usePublicUpdates();
+  const monitoringHistory = useMonitoringHistory();
+  const moduleNews = useModuleNews();
   const roleRequestState = useRoleRequests();
   const isMobile = useIsMobile();
   const [activeTheme, setActiveTheme] = useState<ThemeId>(() => applyInitialTheme());
@@ -1963,6 +2141,7 @@ function App() {
         loginState={loginState}
         onSectionChange={selectSection}
         onThemeChange={changeTheme}
+        userAccess={userAccess}
       />
 
       <main className="voice-main">
@@ -1974,7 +2153,13 @@ function App() {
           serviceCount={activeServices.length || visibleServices.length}
           onStatusClick={() => selectSection("status")}
         />
-        {isMobile ? (
+        {activeSection === "admin" && hasAdminRole(userAccess) ? (
+          <AdminSection
+            history={monitoringHistory}
+            moduleNews={moduleNews}
+            roleRequests={roleRequestState.requests}
+          />
+        ) : isMobile ? (
           <MobilePage
             activeSection={activeSection}
             buildInfo={buildInfo}
