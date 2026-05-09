@@ -990,6 +990,7 @@ const wss = new WebSocketServer({ server, path: "/ws/health" });
 const db = openDatabase();
 let healthInterval: ReturnType<typeof setInterval> | null = null;
 let isShuttingDown = false;
+const SHUTDOWN_TIMEOUT_MS = 2000;
 
 app.disable("x-powered-by");
 app.use(express.json({ limit: "16kb" }));
@@ -1374,6 +1375,62 @@ wss.on("connection", (socket) => {
   socket.send(JSON.stringify(latestSnapshot));
 });
 
+function closeWebSocketServer(): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      clearTimeout(timeout);
+      resolve();
+    };
+    const timeout = setTimeout(() => {
+      for (const client of wss.clients) {
+        client.terminate();
+      }
+      finish();
+    }, SHUTDOWN_TIMEOUT_MS);
+
+    wss.close(finish);
+    for (const client of wss.clients) {
+      if (client.readyState === client.OPEN || client.readyState === client.CONNECTING) {
+        client.close(1001, "Server shutting down");
+      }
+    }
+  });
+}
+
+function closeHttpServer(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (error?: Error) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      clearTimeout(timeout);
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    };
+    const timeout = setTimeout(() => {
+      server.closeAllConnections();
+      finish();
+    }, SHUTDOWN_TIMEOUT_MS);
+
+    server.close((error) => {
+      finish(error);
+    });
+  });
+}
+
 async function shutdown(): Promise<void> {
   if (isShuttingDown) {
     return;
@@ -1385,24 +1442,15 @@ async function shutdown(): Promise<void> {
     clearInterval(healthInterval);
   }
 
-  const closeResults = await Promise.allSettled([
-    new Promise<void>((resolve) => {
-      wss.close(() => resolve());
-    }),
-    new Promise<void>((resolve, reject) => {
-      server.close((error) => {
-        if (error) {
-          reject(error);
-          return;
-        }
+  let exitCode = 0;
+  try {
+    const closeResults = await Promise.allSettled([closeWebSocketServer(), closeHttpServer()]);
+    exitCode = closeResults.some((result) => result.status === "rejected") ? 1 : 0;
+  } finally {
+    db.close();
+  }
 
-        resolve();
-      });
-    })
-  ]);
-
-  db.close();
-  process.exit(closeResults.some((result) => result.status === "rejected") ? 1 : 0);
+  process.exit(exitCode);
 }
 
 process.on("SIGINT", () => {
