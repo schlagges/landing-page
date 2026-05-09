@@ -94,12 +94,30 @@ test("persistent portal endpoints expose empty initial snapshots", async ({ page
 });
 
 test("monitoring history contains service trend samples", async ({ page }) => {
-  await page.request.get("/api/health");
-  const response = await page.request.get("/api/monitoring/history");
-  expect(response.ok()).toBe(true);
-  const body = await response.json();
-  expect(Array.isArray(body.services)).toBe(true);
-  const voice = body.services.find((service: { serviceId: string }) => service.serviceId === "voice");
+  let body: {
+    services?: Array<{
+      serviceId: string;
+      samples?: unknown[];
+      incidents?: unknown[];
+    }>;
+  } = {};
+
+  await expect
+    .poll(async () => {
+      await page.request.get("/api/health");
+      const response = await page.request.get("/api/monitoring/history");
+      if (!response.ok()) {
+        return 0;
+      }
+      body = await response.json();
+      const voice = body.services?.find((service) => service.serviceId === "voice");
+      return Array.isArray(voice?.samples) ? voice.samples.length : 0;
+    })
+    .toBeGreaterThan(0);
+
+  const services = body.services ?? [];
+  expect(Array.isArray(services)).toBe(true);
+  const voice = services.find((service) => service.serviceId === "voice");
   expect(voice).toBeTruthy();
   expect(Array.isArray(voice.samples)).toBe(true);
   expect(Array.isArray(voice.incidents)).toBe(true);
@@ -132,9 +150,37 @@ test("admin role request endpoint requires an admin role", async ({ page }) => {
 });
 
 test("admin area is hidden without admin role and visible with admin role", async ({ page }) => {
+  let adminRoleRequestCalls = 0;
+  let moduleNewsCalls = 0;
+  let monitoringHistoryCalls = 0;
+  let adminRoleHeaders: Record<string, string> | null = null;
+
+  await page.route("**/api/admin/role-requests", async (route) => {
+    adminRoleRequestCalls += 1;
+    adminRoleHeaders = route.request().headers();
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        generatedAt: new Date().toISOString(),
+        requests: []
+      }
+    });
+  });
+  await page.route("**/api/module-news", async (route) => {
+    moduleNewsCalls += 1;
+    await route.fallback();
+  });
+  await page.route("**/api/monitoring/history", async (route) => {
+    monitoringHistoryCalls += 1;
+    await route.fallback();
+  });
+
   await page.goto("/");
   await expect(page.getByRole("button", { name: "Admin", exact: true })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Adminbereich" })).toHaveCount(0);
+  expect(adminRoleRequestCalls).toBe(0);
+  expect(moduleNewsCalls).toBe(0);
+  expect(monitoringHistoryCalls).toBe(0);
 
   await page.goto("/?roles=portal-admin");
   await expect(page.getByRole("button", { name: "Admin", exact: true })).toBeVisible();
@@ -143,6 +189,10 @@ test("admin area is hidden without admin role and visible with admin role", asyn
   await expect(page.getByText("Berechtigungsanfragen")).toBeVisible();
   await expect(page.getByText("Monitoring-Verlauf")).toBeVisible();
   await expect(page.getByText("Modulnews")).toBeVisible();
+  await expect.poll(() => adminRoleRequestCalls).toBe(1);
+  expect(adminRoleHeaders?.["x-schnick-schnack-roles"]).toContain("portal-admin");
+  expect(moduleNewsCalls).toBeGreaterThan(0);
+  expect(monitoringHistoryCalls).toBeGreaterThan(0);
 });
 
 test("desktop renders the Schnick Schnack app layout from the reference", async ({ page }) => {

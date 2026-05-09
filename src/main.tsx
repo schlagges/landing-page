@@ -781,10 +781,15 @@ function usePublicUpdates(): PublicUpdate[] {
   return updates;
 }
 
-function useMonitoringHistory(): MonitoringHistorySnapshot | null {
+function useMonitoringHistory(enabled: boolean): MonitoringHistorySnapshot | null {
   const [snapshot, setSnapshot] = useState<MonitoringHistorySnapshot | null>(null);
 
   useEffect(() => {
+    if (!enabled) {
+      setSnapshot(null);
+      return;
+    }
+
     let closed = false;
 
     async function loadHistory() {
@@ -811,15 +816,20 @@ function useMonitoringHistory(): MonitoringHistorySnapshot | null {
       closed = true;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [enabled]);
 
   return snapshot;
 }
 
-function useModuleNews(): ModuleNews[] {
+function useModuleNews(enabled: boolean): ModuleNews[] {
   const [news, setNews] = useState<ModuleNews[]>([]);
 
   useEffect(() => {
+    if (!enabled) {
+      setNews([]);
+      return;
+    }
+
     let closed = false;
 
     async function loadNews() {
@@ -846,7 +856,7 @@ function useModuleNews(): ModuleNews[] {
       closed = true;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [enabled]);
 
   return news;
 }
@@ -916,6 +926,56 @@ function useRoleRequests() {
     pendingServiceId,
     requestRole
   };
+}
+
+function adminRequestHeaders(userAccess: UserAccess, loginState: LoginState | null): HeadersInit {
+  const headers: Record<string, string> = {};
+  if (userAccess.roles.size > 0) {
+    headers["x-schnick-schnack-roles"] = Array.from(userAccess.roles).join(",");
+  }
+  headers["x-schnick-schnack-user"] = requesterLabel(loginState);
+  return headers;
+}
+
+function useAdminRoleRequests(enabled: boolean, userAccess: UserAccess, loginState: LoginState | null): RoleRequest[] {
+  const [requests, setRequests] = useState<RoleRequest[]>([]);
+
+  useEffect(() => {
+    if (!enabled) {
+      setRequests([]);
+      return;
+    }
+
+    let closed = false;
+
+    async function loadRequests() {
+      try {
+        const response = await fetch("/api/admin/role-requests", {
+          cache: "no-store",
+          headers: adminRequestHeaders(userAccess, loginState)
+        });
+        if (!response.ok) {
+          throw new Error("Admin role requests unavailable");
+        }
+        const data = (await response.json()) as RoleRequestSnapshot;
+        if (!closed) {
+          setRequests(Array.isArray(data.requests) ? data.requests : []);
+        }
+      } catch {
+        if (!closed) {
+          setRequests([]);
+        }
+      }
+    }
+
+    void loadRequests();
+
+    return () => {
+      closed = true;
+    };
+  }, [enabled, loginState, userAccess]);
+
+  return requests;
 }
 
 function useBuildInfo(): BuildInfo | null {
@@ -1891,6 +1951,10 @@ function AdminSection({
   moduleNews: ModuleNews[];
   roleRequests: RoleRequest[];
 }) {
+  const historyServices = Array.isArray(history?.services) ? history.services : [];
+  const visibleRoleRequests = Array.isArray(roleRequests) ? roleRequests : [];
+  const visibleModuleNews = Array.isArray(moduleNews) ? moduleNews : [];
+
   return (
     <section className="content-section admin-section" aria-labelledby="admin-heading">
       <div className="section-heading">
@@ -1901,17 +1965,21 @@ function AdminSection({
       <div className="admin-grid">
         <article className="admin-panel">
           <h3>Monitoring-Verlauf</h3>
-          {(history?.services ?? []).slice(0, 6).map((service) => (
-            <div className="history-row" key={service.serviceId}>
-              <strong>{service.serviceId}</strong>
-              <span>{service.samples.length} Messpunkte</span>
-              <span>{service.incidents.length} Auffälligkeiten</span>
-            </div>
-          ))}
+          {historyServices.slice(0, 6).map((service) => {
+            const samples = Array.isArray(service.samples) ? service.samples : [];
+            const incidents = Array.isArray(service.incidents) ? service.incidents : [];
+            return (
+              <div className="history-row" key={service.serviceId}>
+                <strong>{service.serviceId}</strong>
+                <span>{samples.length} Messpunkte</span>
+                <span>{incidents.length} Auffälligkeiten</span>
+              </div>
+            );
+          })}
         </article>
         <article className="admin-panel">
           <h3>Berechtigungsanfragen</h3>
-          {roleRequests.slice(0, 8).map((request) => (
+          {visibleRoleRequests.slice(0, 8).map((request) => (
             <div className="request-row" key={request.id ?? `${request.serviceId}-${request.role}`}>
               <strong>{request.serviceName}</strong>
               <span>{request.requester ?? "Öffentlich"}</span>
@@ -1921,7 +1989,7 @@ function AdminSection({
         </article>
         <article className="admin-panel">
           <h3>Modulnews</h3>
-          {moduleNews.slice(0, 8).map((item) => (
+          {visibleModuleNews.slice(0, 8).map((item) => (
             <div className="news-row" key={item.id}>
               <strong>{item.projectName}</strong>
               <span>{item.title}</span>
@@ -2075,14 +2143,16 @@ function App() {
   const buildInfo = useBuildInfo();
   const serviceInfo = useServiceInfo();
   const updates = usePublicUpdates();
-  const monitoringHistory = useMonitoringHistory();
-  const moduleNews = useModuleNews();
-  const roleRequestState = useRoleRequests();
   const isMobile = useIsMobile();
   const [activeTheme, setActiveTheme] = useState<ThemeId>(() => applyInitialTheme());
   const [activeSection, setActiveSection] = useState<NavSection>(() => initialSection());
   const [loginState] = useState<LoginState | null>(() => readLoginState());
   const [userAccess] = useState<UserAccess>(() => readUserAccess());
+  const adminViewEnabled = activeSection === "admin" && hasAdminRole(userAccess);
+  const monitoringHistory = useMonitoringHistory(adminViewEnabled);
+  const moduleNews = useModuleNews(adminViewEnabled);
+  const roleRequestState = useRoleRequests();
+  const adminRoleRequests = useAdminRoleRequests(adminViewEnabled, userAccess, loginState);
 
   const services = snapshot?.services ?? [];
   const activeServices = services.filter((service) => service.state !== "planned");
@@ -2157,11 +2227,11 @@ function App() {
           serviceCount={activeServices.length || visibleServices.length}
           onStatusClick={() => selectSection("status")}
         />
-        {activeSection === "admin" && hasAdminRole(userAccess) ? (
+        {adminViewEnabled ? (
           <AdminSection
             history={monitoringHistory}
             moduleNews={moduleNews}
-            roleRequests={roleRequestState.requests}
+            roleRequests={adminRoleRequests}
           />
         ) : isMobile ? (
           <MobilePage
