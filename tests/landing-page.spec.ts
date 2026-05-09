@@ -56,6 +56,26 @@ test("service info OpenAPI and aggregation endpoints are available", async ({ pa
   expect(gitlab?.href).toBe("https://labs.schnick-schnack.info/schnick-schnack/landing-page");
 });
 
+test("persistent portal endpoints expose empty initial snapshots", async ({ page }) => {
+  const historyResponse = await page.request.get("/api/monitoring/history");
+  expect(historyResponse.ok()).toBe(true);
+  const history = await historyResponse.json();
+  expect(typeof history.generatedAt).toBe("string");
+  expect(Array.isArray(history.services)).toBe(true);
+
+  const moduleNewsResponse = await page.request.get("/api/module-news");
+  expect(moduleNewsResponse.ok()).toBe(true);
+  const moduleNews = await moduleNewsResponse.json();
+  expect(typeof moduleNews.generatedAt).toBe("string");
+  expect(Array.isArray(moduleNews.news)).toBe(true);
+
+  const myRequestsResponse = await page.request.get("/api/role-requests/me?requester=landing-page-user");
+  expect(myRequestsResponse.ok()).toBe(true);
+  const myRequests = await myRequestsResponse.json();
+  expect(typeof myRequests.generatedAt).toBe("string");
+  expect(Array.isArray(myRequests.requests)).toBe(true);
+});
+
 test("desktop renders the Schnick Schnack app layout from the reference", async ({ page }) => {
   await page.goto("/");
 

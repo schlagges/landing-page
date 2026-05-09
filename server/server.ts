@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
+import { openDatabase } from "./db.js";
 
 type ServiceState = "online" | "degraded" | "offline" | "checking" | "planned";
 type ServiceCategory = "communication" | "identity" | "development" | "ai" | "roadmap";
@@ -986,6 +987,8 @@ async function refreshHealth(): Promise<HealthSnapshot> {
 const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server, path: "/ws/health" });
+const db = openDatabase();
+void db;
 
 app.disable("x-powered-by");
 app.use(express.json({ limit: "16kb" }));
@@ -1018,12 +1021,24 @@ app.get("/api/updates", async (_request, response) => {
   response.json(await updateSnapshot());
 });
 
+app.get("/api/monitoring/history", (_request, response) => {
+  response.json({ generatedAt: new Date().toISOString(), services: [] });
+});
+
+app.get("/api/module-news", (_request, response) => {
+  response.json({ generatedAt: new Date().toISOString(), news: [] });
+});
+
 app.get("/api/role-requests", (_request, response) => {
   response.json({
     generatedAt: new Date().toISOString(),
     channel: ROLE_REQUEST_CHANNEL_URL,
     requests: readRoleRequests()
   });
+});
+
+app.get("/api/role-requests/me", (_request, response) => {
+  response.json({ generatedAt: new Date().toISOString(), requests: [] });
 });
 
 app.post("/api/role-requests", async (request, response) => {
