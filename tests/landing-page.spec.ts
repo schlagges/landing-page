@@ -332,6 +332,30 @@ test("gitlab tag deletion events are ignored", async ({ page }) => {
   expect(matches).toHaveLength(0);
 });
 
+test("gitlab top-level release events are stored as module news", async ({ page }) => {
+  const payload = {
+    object_kind: "release",
+    project: {
+      id: 46,
+      name: "OpenVoice",
+      web_url: "https://labs.schnick-schnack.info/schnick-schnack/openvoice"
+    },
+    tag: "v2.0.0",
+    name: "OpenVoice 2.0.0",
+    released_at: "2026-05-08T20:15:00.000+02:00",
+    url: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/releases/v2.0.0"
+  };
+
+  const response = await page.request.post("/api/gitlab/events", { data: payload, headers: gitLabWebhookHeaders });
+  expect(response.ok()).toBe(true);
+  expect((await response.json()).news.eventType).toBe("release");
+
+  const list = await page.request.get("/api/module-news");
+  const body = await list.json();
+  const matches = body.news.filter((item: { externalEventId: string }) => item.externalEventId === "gitlab:release:46:v2.0.0");
+  expect(matches).toHaveLength(1);
+});
+
 test("side navigation opens detailed status and channel views", async ({ page }) => {
   await page.goto("/");
 

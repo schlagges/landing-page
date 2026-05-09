@@ -224,9 +224,17 @@ export function normalizeGitLabEvent(payload: unknown): ModuleNewsInput | null {
 
   if (event.object_kind === "release" || event.event_type === "release") {
     const release = event.release ?? event.object_attributes;
-    const tag = tagName(release?.tag);
-    const title = cleanString(release?.name, 220) ?? (tag ? `Release ${tag}` : null);
-    const eventAt = eventDate(release?.released_at, release?.updated_at, release?.created_at, new Date().toISOString());
+    const tag = tagName(release?.tag) ?? tagName((event as GitLabAttributes).tag);
+    const title = cleanString(release?.name, 220) ?? cleanString((event as GitLabAttributes).name, 220) ?? (tag ? `Release ${tag}` : null);
+    const eventAt = eventDate(
+      release?.released_at,
+      (event as GitLabAttributes).released_at,
+      release?.updated_at,
+      (event as GitLabAttributes).updated_at,
+      release?.created_at,
+      (event as GitLabAttributes).created_at,
+      new Date().toISOString()
+    );
     if (!tag || !title || !eventAt) {
       return null;
     }
@@ -237,7 +245,7 @@ export function normalizeGitLabEvent(payload: unknown): ModuleNewsInput | null {
       projectName: projectNameValue,
       eventType: "release",
       title,
-      url: cleanUrl(release?.url) ?? cleanUrl(project?.web_url),
+      url: cleanUrl(release?.url) ?? cleanUrl((event as GitLabAttributes).url) ?? cleanUrl(project?.web_url),
       eventAt
     };
   }
