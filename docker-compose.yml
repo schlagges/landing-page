@@ -19,8 +19,8 @@ services:
       HEALTH_AUTH_URL: ${HEALTH_AUTH_URL:-http://127.0.0.1:8081/realms/master/.well-known/openid-configuration}
       HEALTH_SLACK_URL: ${HEALTH_SLACK_URL:-http://127.0.0.1:3010/}
       HEALTH_GITLAB_URL: ${HEALTH_GITLAB_URL:-https://labs.schnick-schnack.info/schnick-schnack/landing-page}
-      SCHNACK_TO_TEXT_URL: ${SCHNACK_TO_TEXT_URL:-}
-      HEALTH_SCHNACK_TO_TEXT_URL: ${HEALTH_SCHNACK_TO_TEXT_URL:-}
+      SCHNACK_TO_TEXT_URL: ${SCHNACK_TO_TEXT_URL:-https://stt.schnick-schnack.info}
+      HEALTH_SCHNACK_TO_TEXT_URL: ${HEALTH_SCHNACK_TO_TEXT_URL:-https://stt.schnick-schnack.info}
       LLM_HUB_URL: ${LLM_HUB_URL:-}
       HEALTH_LLM_HUB_URL: ${HEALTH_LLM_HUB_URL:-}
       INFO_VOICE_URL: ${INFO_VOICE_URL:-http://127.0.0.1:3000/.well-known/schnick-schnack/service-info.json}

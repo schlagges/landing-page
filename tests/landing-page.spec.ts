@@ -28,15 +28,16 @@ test("service info OpenAPI and aggregation endpoints are available", async ({ pa
   expect(healthResponse.ok()).toBe(true);
   const health = await healthResponse.json();
   const schnackToText = health.services.find(
-    (service: { id: string; href: string | null; message: string }) => service.id === "schnack-to-text"
+    (service: { id: string; href: string | null; requiredRole?: string }) => service.id === "schnack-to-text"
   );
-  expect(schnackToText?.href).toBeNull();
-  expect(schnackToText?.message).toBe("Noch nicht in Prod");
+  expect(schnackToText?.href).toBe("https://stt.schnick-schnack.info");
+  expect(schnackToText?.requiredRole).toBe("schnack-to-text");
   const llmHub = health.services.find(
-    (service: { id: string; href: string | null; message: string }) => service.id === "llm-hub"
+    (service: { id: string; href: string | null; message: string; requiredRole?: string }) => service.id === "llm-hub"
   );
   expect(llmHub?.href).toBeNull();
   expect(llmHub?.message).toBe("Noch nicht in Prod");
+  expect(llmHub?.requiredRole).toBe("llm-hub");
   const gitlab = health.services.find((service: { id: string; href: string | null }) => service.id === "gitlab");
   expect(gitlab?.href).toBe("https://labs.schnick-schnack.info/schnick-schnack/landing-page");
 });
@@ -56,7 +57,8 @@ test("desktop renders the Schnick Schnack app layout from the reference", async 
   const schnackToText = page.getByLabel("Schnack To Text System");
   await expect(schnackToText).toBeVisible();
   await expect(schnackToText.getByText("Audio-Mitschnitt mit Transkription und automatischer Zusammenfassung.")).toBeVisible();
-  await expect(schnackToText.getByText("Noch nicht in Prod", { exact: true })).toBeVisible();
+  await expect(schnackToText.getByText("Rolle schnack-to-text", { exact: true })).toBeVisible();
+  await expect(schnackToText.getByRole("link", { name: "Anmelden" })).toBeVisible();
   await expect(schnackToText).toBeInViewport();
   const llmHub = page.getByLabel("LLM Hub System");
   await expect(llmHub).toBeVisible();
@@ -80,7 +82,7 @@ test("left navigation changes the active section", async ({ page }) => {
   await news.click();
   await expect(news).toHaveAttribute("aria-pressed", "true");
   await expect(systems).toHaveAttribute("aria-pressed", "false");
-  await expect(page.getByRole("heading", { name: "Öffentliche Meldungen" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Was gerade passiert" })).toBeVisible();
   await expect(page).toHaveURL(/section=news/);
 });
 
@@ -88,7 +90,7 @@ test("login link preserves current section and existing login state", async ({ p
   await page.goto("/?section=news&login_state=present");
 
   await expect(page.getByRole("button", { name: "News", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("heading", { name: "Öffentliche Meldungen" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Was gerade passiert" })).toBeVisible();
 
   const href = await page.getByRole("link", { name: "Anmelden" }).first().getAttribute("href");
   expect(href).toBeTruthy();
@@ -106,6 +108,19 @@ test("login link preserves current section and existing login state", async ({ p
   const redirectUri = new URL(loginUrl.searchParams.get("redirect_uri")!);
   expect(redirectUri.searchParams.get("section")).toBe("news");
   expect(redirectUri.searchParams.get("theme")).toBe("dark");
+});
+
+test("news page lists recent module merge requests with dates", async ({ page }) => {
+  await page.goto("/?section=news");
+
+  await expect(page.getByRole("heading", { name: "Was gerade passiert" })).toBeVisible();
+  const update = page.locator(".news-archive article").filter({ hasText: "OpenVoice UI-Redesign ohne Dummy-Buttons" });
+  await expect(update).toBeVisible();
+  await expect(update.getByText("08.05.2026")).toBeVisible();
+  await expect(update.getByRole("link", { name: "Öffnen" })).toHaveAttribute(
+    "href",
+    /labs\.schnick-schnack\.info\/schnick-schnack\/openvoice\/-\/merge_requests\/34/
+  );
 });
 
 test("side navigation opens detailed status and channel views", async ({ page }) => {
@@ -158,7 +173,7 @@ test("theme toggle switches between dark and light and persists", async ({ page 
 });
 
 test("system rows keep public links and receive the active theme", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?roles=voice");
 
   const voice = page.getByLabel("Voice System");
   await expect(voice).toBeVisible();
@@ -171,6 +186,21 @@ test("system rows keep public links and receive the active theme", async ({ page
   await expect(voice.getByRole("link", { name: /Öffnen/i })).toHaveAttribute(
     "href",
     /https:\/\/voice\.schnick-schnack\.info\/?\?theme=light/
+  );
+});
+
+test("module access shows missing-role request action", async ({ page }) => {
+  await page.goto("/?roles=voice");
+
+  const voice = page.getByLabel("Voice System");
+  await expect(voice.getByText("Zugriff aktiv", { exact: true })).toBeVisible();
+  await expect(voice.getByRole("link", { name: /Öffnen/i })).toBeVisible();
+
+  const schnackToText = page.getByLabel("Schnack To Text System");
+  await expect(schnackToText.getByText("Rolle fehlt", { exact: true })).toBeVisible();
+  await expect(schnackToText.getByRole("link", { name: "Rolle anfragen" })).toHaveAttribute(
+    "href",
+    /keycloak-admins.*schnack-to-text/
   );
 });
 

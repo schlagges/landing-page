@@ -15,6 +15,7 @@ type PublicService = {
   icon: "brain" | "file-text" | "mic" | "shield" | "gitlab" | "slack";
   href: string | null;
   unavailableActionLabel?: string;
+  requiredRole?: string;
   description: string;
   state: ServiceState;
   message: string;
@@ -31,6 +32,7 @@ type HealthTarget = {
   icon: PublicService["icon"];
   href: string | null;
   unavailableActionLabel?: string;
+  requiredRole?: string;
   description: string;
   url?: string;
   okStatuses?: number[];
@@ -159,7 +161,8 @@ function optionalEnv(name: string): string | null {
   return value ? value : null;
 }
 
-const SCHNACK_TO_TEXT_URL = optionalEnv("SCHNACK_TO_TEXT_URL");
+const SCHNACK_TO_TEXT_DEFAULT_URL = "https://stt.schnick-schnack.info";
+const SCHNACK_TO_TEXT_URL = optionalEnv("SCHNACK_TO_TEXT_URL") ?? SCHNACK_TO_TEXT_DEFAULT_URL;
 const SCHNACK_TO_TEXT_HEALTH_URL = optionalEnv("HEALTH_SCHNACK_TO_TEXT_URL") ?? SCHNACK_TO_TEXT_URL ?? undefined;
 const SCHNACK_TO_TEXT_INFO_URL = optionalEnv("INFO_SCHNACK_TO_TEXT_URL") ?? defaultInfoUrl(SCHNACK_TO_TEXT_URL);
 const LLM_HUB_URL = optionalEnv("LLM_HUB_URL");
@@ -173,6 +176,7 @@ const targets: HealthTarget[] = [
     category: "communication",
     icon: "mic",
     href: "https://voice.schnick-schnack.info",
+    requiredRole: "voice",
     description: "Geschützter Zugang zur OpenVoice-Oberfläche.",
     url: process.env.HEALTH_VOICE_URL ?? "https://voice.schnick-schnack.info/",
     infoUrl: process.env.INFO_VOICE_URL ?? defaultInfoUrl("https://voice.schnick-schnack.info"),
@@ -184,6 +188,7 @@ const targets: HealthTarget[] = [
     category: "identity",
     icon: "shield",
     href: "https://auth.schnick-schnack.info",
+    requiredRole: "auth",
     description: "Zentrale Anmeldung für Dienste mit Single Sign-on.",
     url:
       process.env.HEALTH_AUTH_URL ??
@@ -197,6 +202,7 @@ const targets: HealthTarget[] = [
     category: "communication",
     icon: "slack",
     href: "https://slack.schnick-schnack.info",
+    requiredRole: "slack",
     description: "Team-Kommunikation, Channels und Benachrichtigungen für Betrieb und Projekte.",
     url: process.env.HEALTH_SLACK_URL ?? "https://slack.schnick-schnack.info/",
     infoUrl: process.env.INFO_SLACK_URL ?? defaultInfoUrl("https://slack.schnick-schnack.info"),
@@ -208,7 +214,7 @@ const targets: HealthTarget[] = [
     category: "communication",
     icon: "file-text",
     href: SCHNACK_TO_TEXT_URL,
-    unavailableActionLabel: "Noch nicht in Prod",
+    requiredRole: "schnack-to-text",
     description: "Audio-Mitschnitt mit Transkription und automatischer Zusammenfassung.",
     url: SCHNACK_TO_TEXT_HEALTH_URL,
     infoUrl: SCHNACK_TO_TEXT_INFO_URL,
@@ -221,6 +227,7 @@ const targets: HealthTarget[] = [
     icon: "brain",
     href: LLM_HUB_URL,
     unavailableActionLabel: "Noch nicht in Prod",
+    requiredRole: "llm-hub",
     description: "Zentraler Zugang zu LLM-Tools, Modellen und Experimenten.",
     url: LLM_HUB_HEALTH_URL,
     infoUrl: LLM_HUB_INFO_URL,
@@ -232,6 +239,7 @@ const targets: HealthTarget[] = [
     category: "development",
     icon: "gitlab",
     href: "https://labs.schnick-schnack.info/schnick-schnack/landing-page",
+    requiredRole: "gitlab",
     description: "Code- und Projektplattform für die schnick-schnack-Projekte.",
     url: process.env.HEALTH_GITLAB_URL ?? "https://labs.schnick-schnack.info/schnick-schnack/landing-page",
     infoUrl: process.env.INFO_GITLAB_URL ?? defaultInfoUrl("https://labs.schnick-schnack.info"),
@@ -263,6 +271,7 @@ let latestSnapshot: HealthSnapshot = {
     icon: target.icon,
     href: target.href,
     unavailableActionLabel: target.unavailableActionLabel,
+    requiredRole: target.requiredRole,
     description: target.description,
     state: target.url ? "checking" : "planned",
     message: target.url ? "Status wird geprüft." : target.unavailableActionLabel ?? "Geplant.",
@@ -540,6 +549,7 @@ async function checkTarget(target: HealthTarget): Promise<PublicService> {
       icon: target.icon,
       href: target.href,
       unavailableActionLabel: target.unavailableActionLabel,
+      requiredRole: target.requiredRole,
       description: target.description,
       state: "planned",
       message: target.unavailableActionLabel ?? "Geplant.",
@@ -571,6 +581,7 @@ async function checkTarget(target: HealthTarget): Promise<PublicService> {
       icon: target.icon,
       href: target.href,
       unavailableActionLabel: target.unavailableActionLabel,
+      requiredRole: target.requiredRole,
       description: target.description,
       state: isExpected ? "online" : "degraded",
       message: isExpected ? "Dienst antwortet." : "Dienst antwortet unerwartet.",
@@ -587,6 +598,7 @@ async function checkTarget(target: HealthTarget): Promise<PublicService> {
       icon: target.icon,
       href: target.href,
       unavailableActionLabel: target.unavailableActionLabel,
+      requiredRole: target.requiredRole,
       description: target.description,
       state: "offline",
       message: "Dienst ist aktuell nicht erreichbar.",
