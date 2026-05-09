@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { openDatabase } from "./db.js";
+import { requireAdmin } from "./request-context.js";
 
 type ServiceState = "online" | "degraded" | "offline" | "checking" | "planned";
 type ServiceCategory = "communication" | "identity" | "development" | "ai" | "roadmap";
@@ -1040,6 +1041,14 @@ app.get("/api/role-requests", (_request, response) => {
 });
 
 app.get("/api/role-requests/me", (_request, response) => {
+  response.json({ generatedAt: new Date().toISOString(), requests: [] });
+});
+
+app.get("/api/admin/role-requests", (request, response) => {
+  if (!requireAdmin(request, response)) {
+    return;
+  }
+
   response.json({ generatedAt: new Date().toISOString(), requests: [] });
 });
 

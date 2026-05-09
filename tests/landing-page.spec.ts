@@ -76,6 +76,19 @@ test("persistent portal endpoints expose empty initial snapshots", async ({ page
   expect(Array.isArray(myRequests.requests)).toBe(true);
 });
 
+test("admin role request endpoint requires an admin role", async ({ page }) => {
+  const denied = await page.request.get("/api/admin/role-requests");
+  expect(denied.status()).toBe(403);
+  expect(await denied.json()).toEqual({ message: "Admin role required." });
+
+  const allowed = await page.request.get("/api/admin/role-requests", {
+    headers: { "x-schnick-schnack-roles": "portal-admin" }
+  });
+  expect(allowed.ok()).toBe(true);
+  const body = await allowed.json();
+  expect(Array.isArray(body.requests)).toBe(true);
+});
+
 test("desktop renders the Schnick Schnack app layout from the reference", async ({ page }) => {
   await page.goto("/");
 
