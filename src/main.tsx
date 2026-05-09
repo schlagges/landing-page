@@ -44,7 +44,7 @@ type RoleRequest = {
   serviceName: string;
   requiredRole?: string;
   role: string;
-  state: RoleRequestState;
+  state?: RoleRequestState;
   status?: RoleRequestState;
   requester?: string;
   reason?: string;
@@ -506,12 +506,16 @@ function requesterLabel(loginState: LoginState | null): string {
   return loginState?.value ?? "landing-page-user";
 }
 
+function roleRequestState(request: RoleRequest): RoleRequestState {
+  return request.status ?? request.state ?? "requested";
+}
+
 function requestedRoleFor(service: PublicService, requests: RoleRequest[]): RoleRequest | undefined {
   return requests.find(
     (request) =>
       request.serviceId === service.id &&
       (request.requiredRole ?? request.role) === service.requiredRole &&
-      (request.status ?? request.state) === "requested"
+      roleRequestState(request) === "requested"
   );
 }
 
@@ -1911,7 +1915,7 @@ function AdminSection({
             <div className="request-row" key={request.id ?? `${request.serviceId}-${request.role}`}>
               <strong>{request.serviceName}</strong>
               <span>{request.requester ?? "Öffentlich"}</span>
-              <StatusPill state={request.status ?? request.state} />
+              <StatusPill state={roleRequestState(request)} />
             </div>
           ))}
         </article>
