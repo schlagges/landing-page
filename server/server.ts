@@ -10,6 +10,7 @@ import {
   listPublicRoleRequests,
   listRoleRequests,
   listRoleRequestsForRequester,
+  publicRoleRequest,
   reviewRoleRequest
 } from "./role-requests.js";
 import { requestContext, requireAdmin } from "./request-context.js";
@@ -997,6 +998,14 @@ app.get("/api/role-requests", (_request, response) => {
 
 app.get("/api/role-requests/me", (request, response) => {
   const context = requestContext(request);
+  if (!context.isTrustedRequester) {
+    response.json({
+      generatedAt: new Date().toISOString(),
+      requests: []
+    });
+    return;
+  }
+
   response.json({
     generatedAt: new Date().toISOString(),
     requests: listRoleRequestsForRequester(db, context.requester)
@@ -1040,7 +1049,10 @@ app.post("/api/role-requests", async (request, response) => {
     });
   }
 
-  response.status(result.created ? 201 : 200).json({ request: result.request, channel: ROLE_REQUEST_CHANNEL_URL });
+  response.status(result.created ? 201 : 200).json({
+    request: context.isTrustedRequester ? result.request : publicRoleRequest(result.request),
+    channel: ROLE_REQUEST_CHANNEL_URL
+  });
 });
 
 app.post("/api/admin/role-requests/:id/approve", (request, response) => {

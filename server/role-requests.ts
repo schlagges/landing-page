@@ -68,16 +68,16 @@ function mapRoleRequest(row: RoleRequestRow): RoleRequestRecord {
   };
 }
 
-function mapPublicRoleRequest(row: RoleRequestRow): PublicRoleRequestRecord {
+export function publicRoleRequest(record: RoleRequestRecord): PublicRoleRequestRecord {
   return {
-    serviceId: row.service_id,
-    serviceName: row.service_name,
-    requiredRole: row.required_role,
-    role: row.required_role,
-    status: row.status,
-    state: row.status,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
+    serviceId: record.serviceId,
+    serviceName: record.serviceName,
+    requiredRole: record.requiredRole,
+    role: record.role,
+    status: record.status,
+    state: record.state,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt
   };
 }
 
@@ -90,7 +90,7 @@ export function listRoleRequests(db: Database): RoleRequestRecord[] {
 export function listPublicRoleRequests(db: Database): PublicRoleRequestRecord[] {
   return (
     db.prepare("SELECT * FROM role_requests WHERE status = 'requested' ORDER BY created_at DESC LIMIT 250").all() as RoleRequestRow[]
-  ).map(mapPublicRoleRequest);
+  ).map((row) => publicRoleRequest(mapRoleRequest(row)));
 }
 
 export function listRoleRequestsForRequester(db: Database, requester: string): RoleRequestRecord[] {

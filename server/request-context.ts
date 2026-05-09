@@ -4,6 +4,7 @@ export type RequestContext = {
   requester: string;
   roles: Set<string>;
   trustedRoles: Set<string>;
+  isTrustedRequester: boolean;
   isAdmin: boolean;
 };
 
@@ -72,16 +73,17 @@ export function requestContext(request: Request): RequestContext {
   trustedRoles.forEach((role) => roles.add(role));
   addDelimitedRoles(roles, typeof request.query.roles === "string" ? request.query.roles : undefined);
 
-  const requester = sanitizeIdentity(
-    (isTrustedLocal ? request.headers["x-schnick-schnack-user"] ?? request.headers["x-forwarded-user"] : undefined) ??
-      request.query.requester,
-    "landing-page-user"
-  );
+  const trustedRequester = isTrustedLocal
+    ? request.headers["x-schnick-schnack-user"] ?? request.headers["x-forwarded-user"]
+    : undefined;
+  const isTrustedRequester = typeof trustedRequester === "string" && trustedRequester.trim().length > 0;
+  const requester = sanitizeIdentity(trustedRequester ?? request.query.requester, "landing-page-user");
 
   return {
     requester,
     roles,
     trustedRoles,
+    isTrustedRequester,
     isAdmin: Array.from(trustedRoles).some((role) => ADMIN_ROLES.has(role))
   };
 }

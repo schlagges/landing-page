@@ -1,5 +1,20 @@
 import { expect, test } from "@playwright/test";
 
+function expectPublicSafeRoleRequest(request: Record<string, unknown>) {
+  expect(request.serviceId).toBeTruthy();
+  expect(request.serviceName).toBeTruthy();
+  expect(request.requiredRole).toBeTruthy();
+  expect(request.role).toBeTruthy();
+  expect(request.status).toBeTruthy();
+  expect(request.state).toBeTruthy();
+  expect(request).not.toHaveProperty("id");
+  expect(request).not.toHaveProperty("requester");
+  expect(request).not.toHaveProperty("source");
+  expect(request).not.toHaveProperty("reason");
+  expect(request).not.toHaveProperty("reviewer");
+  expect(request).not.toHaveProperty("reviewedAt");
+}
+
 test("service info OpenAPI and aggregation endpoints are available", async ({ page }) => {
   const openApiResponse = await page.request.get("/api/openapi.json");
   expect(openApiResponse.ok()).toBe(true);
@@ -341,6 +356,10 @@ test("role requests can be created and reviewed through sqlite APIs", async ({ p
   expect(duplicated.request.status).toBe("requested");
   expect(duplicated.request.reason).toBe("Ich brauche Transkription für Projektmeetings.");
 
+  const untrustedMine = await page.request.get("/api/role-requests/me?requester=boris");
+  expect(untrustedMine.ok()).toBe(true);
+  expect((await untrustedMine.json()).requests).toEqual([]);
+
   const pendingPublicList = await page.request.get("/api/role-requests");
   expect(pendingPublicList.ok()).toBe(true);
   const pendingPublicBody = await pendingPublicList.json();
@@ -348,12 +367,7 @@ test("role requests can be created and reviewed through sqlite APIs", async ({ p
     (request: { serviceId: string; role: string }) => request.serviceId === "schnack-to-text" && request.role === "schnack-to-text"
   );
   expect(publicPendingRequest).toBeTruthy();
-  expect(publicPendingRequest).not.toHaveProperty("id");
-  expect(publicPendingRequest).not.toHaveProperty("requester");
-  expect(publicPendingRequest).not.toHaveProperty("source");
-  expect(publicPendingRequest).not.toHaveProperty("reason");
-  expect(publicPendingRequest).not.toHaveProperty("reviewer");
-  expect(publicPendingRequest).not.toHaveProperty("reviewedAt");
+  expectPublicSafeRoleRequest(publicPendingRequest);
 
   const mine = await page.request.get("/api/role-requests/me", {
     headers: { "x-schnick-schnack-user": "boris" }
@@ -361,6 +375,37 @@ test("role requests can be created and reviewed through sqlite APIs", async ({ p
   expect(mine.ok()).toBe(true);
   const mineBody = await mine.json();
   expect(mineBody.requests.some((request: { id: string }) => request.id === created.request.id)).toBe(true);
+  const trustedMineRequest = mineBody.requests.find((request: { id: string }) => request.id === created.request.id);
+  expect(trustedMineRequest.reason).toBe("Ich brauche Transkription für Projektmeetings.");
+  expect(trustedMineRequest.requester).toBe("boris");
+
+  const publicCreate = await page.request.post("/api/role-requests", {
+    data: { serviceId: "voice", reason: "Bitte Voice freischalten.", source: "https://example.invalid/private-path" }
+  });
+  expect(publicCreate.status()).toBe(201);
+  const publicCreated = await publicCreate.json();
+  expectPublicSafeRoleRequest(publicCreated.request);
+  expect(publicCreated.request.serviceId).toBe("voice");
+  expect(publicCreated.request.status).toBe("requested");
+
+  const publicDuplicate = await page.request.post("/api/role-requests", {
+    data: { serviceId: "voice", reason: "Noch einmal Voice.", source: "https://example.invalid/second-private-path" }
+  });
+  expect(publicDuplicate.status()).toBe(200);
+  const publicDuplicated = await publicDuplicate.json();
+  expectPublicSafeRoleRequest(publicDuplicated.request);
+  expect(publicDuplicated.request.serviceId).toBe("voice");
+  expect(publicDuplicated.request.status).toBe("requested");
+
+  const adminBeforeReview = await page.request.get("/api/admin/role-requests", {
+    headers: { "x-schnick-schnack-user": "admin", "x-schnick-schnack-roles": "portal-admin" }
+  });
+  const adminBeforeReviewBody = await adminBeforeReview.json();
+  const publicInternalRequest = adminBeforeReviewBody.requests.find(
+    (request: { serviceId: string; requester: string; id: string }) =>
+      request.serviceId === "voice" && request.requester === "landing-page-user"
+  );
+  expect(publicInternalRequest?.id).toBeTruthy();
 
   const approve = await page.request.post(`/api/admin/role-requests/${created.request.id}/approve`, {
     headers: { "x-schnick-schnack-user": "admin", "x-schnick-schnack-roles": "portal-admin" }
@@ -383,6 +428,19 @@ test("role requests can be created and reviewed through sqlite APIs", async ({ p
   expect(approvedCreateBody.request.status).toBe("approved");
   expect(approvedCreateBody.request.reviewer).toBe("admin");
   expect(approvedCreateBody.request.reviewedAt).toBe(approved.request.reviewedAt);
+
+  const publicApprove = await page.request.post(`/api/admin/role-requests/${publicInternalRequest.id}/approve`, {
+    headers: { "x-schnick-schnack-user": "admin", "x-schnick-schnack-roles": "portal-admin" }
+  });
+  expect(publicApprove.ok()).toBe(true);
+  const publicApprovedCreate = await page.request.post("/api/role-requests", {
+    data: { serviceId: "voice", reason: "Terminal duplicate.", source: "https://example.invalid/terminal-private-path" }
+  });
+  expect(publicApprovedCreate.status()).toBe(200);
+  const publicApprovedCreateBody = await publicApprovedCreate.json();
+  expectPublicSafeRoleRequest(publicApprovedCreateBody.request);
+  expect(publicApprovedCreateBody.request.serviceId).toBe("voice");
+  expect(publicApprovedCreateBody.request.status).toBe("approved");
 
   const rejectCreate = await page.request.post("/api/role-requests", {
     data: { serviceId: "gitlab", reason: "Code lesen.", source: "playwright" },
@@ -412,14 +470,10 @@ test("role requests can be created and reviewed through sqlite APIs", async ({ p
   const publicBody = await publicList.json();
   expect(publicBody.requests.some((request: { serviceId: string }) => request.serviceId === "schnack-to-text")).toBe(false);
   expect(publicBody.requests.some((request: { serviceId: string }) => request.serviceId === "gitlab")).toBe(false);
+  expect(publicBody.requests.some((request: { serviceId: string }) => request.serviceId === "voice")).toBe(false);
   for (const request of publicBody.requests as Array<Record<string, unknown>>) {
     expect(request.state).toBe("requested");
-    expect(request).not.toHaveProperty("id");
-    expect(request).not.toHaveProperty("requester");
-    expect(request).not.toHaveProperty("source");
-    expect(request).not.toHaveProperty("reason");
-    expect(request).not.toHaveProperty("reviewer");
-    expect(request).not.toHaveProperty("reviewedAt");
+    expectPublicSafeRoleRequest(request);
   }
 });
 
