@@ -37,6 +37,7 @@ type GitLabProject = {
 };
 
 type GitLabAttributes = {
+  action?: unknown;
   iid?: unknown;
   state?: unknown;
   title?: unknown;
@@ -126,8 +127,13 @@ function projectName(project: GitLabProject | undefined): string | null {
 function eventDate(...values: unknown[]): string | null {
   for (const value of values) {
     const cleaned = cleanString(value, 80);
-    if (cleaned && !Number.isNaN(new Date(cleaned).getTime())) {
-      return cleaned;
+    if (!cleaned) {
+      continue;
+    }
+
+    const date = new Date(cleaned);
+    if (!Number.isNaN(date.getTime())) {
+      return date.toISOString();
     }
   }
 
@@ -231,6 +237,10 @@ export function normalizeGitLabEvent(payload: unknown): ModuleNewsInput | null {
 
   if (event.object_kind === "release" || event.event_type === "release") {
     const release = event.release ?? event.object_attributes;
+    if (cleanString(release?.action, 40) === "delete" || cleanString((event as GitLabAttributes).action, 40) === "delete") {
+      return null;
+    }
+
     const tag = tagName(release?.tag) ?? tagName((event as GitLabAttributes).tag);
     const title = cleanString(release?.name, 220) ?? cleanString((event as GitLabAttributes).name, 220) ?? (tag ? `Release ${tag}` : null);
     const eventAt = eventDate(

@@ -353,12 +353,39 @@ test("gitlab top-level release events are stored as module news", async ({ page 
 
   const response = await page.request.post("/api/gitlab/events", { data: payload, headers: gitLabWebhookHeaders });
   expect(response.ok()).toBe(true);
-  expect((await response.json()).news.eventType).toBe("release");
+  const responseBody = await response.json();
+  expect(responseBody.news.eventType).toBe("release");
+  expect(responseBody.news.eventAt).toBe("2026-05-08T18:15:00.000Z");
 
   const list = await page.request.get("/api/module-news");
   const body = await list.json();
   const matches = body.news.filter((item: { externalEventId: string }) => item.externalEventId === "gitlab:release:46:v2.0.0");
   expect(matches).toHaveLength(1);
+});
+
+test("gitlab release delete events are ignored", async ({ page }) => {
+  const payload = {
+    object_kind: "release",
+    action: "delete",
+    project: {
+      id: 48,
+      name: "OpenVoice",
+      web_url: "https://labs.schnick-schnack.info/schnick-schnack/openvoice"
+    },
+    tag: "v2.0.1",
+    name: "OpenVoice 2.0.1",
+    released_at: "2026-05-08T20:30:00.000+02:00",
+    url: "https://labs.schnick-schnack.info/schnick-schnack/openvoice/-/releases/v2.0.1"
+  };
+
+  const response = await page.request.post("/api/gitlab/events", { data: payload, headers: gitLabWebhookHeaders });
+  expect(response.status()).toBe(202);
+  expect(await response.json()).toEqual({ message: "Ignored GitLab event." });
+
+  const list = await page.request.get("/api/module-news");
+  const body = await list.json();
+  const matches = body.news.filter((item: { externalEventId: string }) => item.externalEventId === "gitlab:release:48:v2.0.1");
+  expect(matches).toHaveLength(0);
 });
 
 test("gitlab tag events with colliding slugs are stored separately", async ({ page }) => {
