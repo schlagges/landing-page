@@ -30,7 +30,7 @@ Im Container wird der Pfad über `SQLITE_DB_PATH` gesetzt und durch `./data:/app
 docker compose up -d --build
 ```
 
-Der Container veröffentlicht den Dienst lokal auf `127.0.0.1:8090`. Nginx terminiert TLS und proxyt die Hauptdomain sowie den WebSocket-Pfad.
+Mit `network_mode: host` lauscht der Container auf dem Host-Port `${PORT:-8090}` und der konfigurierten Host-Adresse `HOST` (`0.0.0.0` im Compose-Standard). Wenn der Dienst öffentlich gebunden ist, muss er per Firewall oder Reverse Proxy geschützt werden. Nginx terminiert TLS und proxyt die Hauptdomain sowie den WebSocket-Pfad.
 
 ## GitLab Modulnews
 
@@ -40,7 +40,13 @@ GitLab Releases, Tags und gemergte Merge Requests können über den Webhook-Endp
 POST /api/gitlab/events
 ```
 
-Der Header `X-Gitlab-Token` muss `GITLAB_WEBHOOK_SECRET` entsprechen. Der Server dedupliziert Ereignisse über eine externe Event-ID. Wiederholte Webhook-Zustellungen erzeugen keine doppelten News.
+Vor dem Start muss `GITLAB_WEBHOOK_SECRET` per `.env` oder Umgebung gesetzt werden:
+
+```bash
+GITLAB_WEBHOOK_SECRET=...
+```
+
+Der Header `X-Gitlab-Token` muss diesem Wert entsprechen. Ohne gesetztes Secret ist der Webhook deaktiviert und antwortet mit `503`. Der Server dedupliziert Ereignisse über eine externe Event-ID aus GitLab-Projekt und Event-Kennung, zum Beispiel Merge-Request-IID oder Tag-Name. Wiederholte Webhook-Zustellungen erzeugen keine doppelten News.
 
 Unsichere oder Cross-Origin-URLs werden nicht veröffentlicht. Release- und Tag-Delete-Events werden ignoriert.
 
