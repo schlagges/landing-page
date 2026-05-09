@@ -19,6 +19,11 @@ export type RoleRequestRecord = {
   reviewedAt: string | null;
 };
 
+export type PublicRoleRequestRecord = Pick<
+  RoleRequestRecord,
+  "id" | "serviceId" | "serviceName" | "role" | "state" | "requester" | "source" | "createdAt" | "updatedAt"
+>;
+
 type RoleRequestRow = {
   id: string;
   service_id: string;
@@ -63,10 +68,30 @@ function mapRoleRequest(row: RoleRequestRow): RoleRequestRecord {
   };
 }
 
+function mapPublicRoleRequest(row: RoleRequestRow): PublicRoleRequestRecord {
+  return {
+    id: row.id,
+    serviceId: row.service_id,
+    serviceName: row.service_name,
+    role: row.required_role,
+    state: row.status,
+    requester: row.requester,
+    source: row.source,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
 export function listRoleRequests(db: Database): RoleRequestRecord[] {
   return (db.prepare("SELECT * FROM role_requests ORDER BY created_at DESC LIMIT 250").all() as RoleRequestRow[]).map(
     mapRoleRequest
   );
+}
+
+export function listPublicRoleRequests(db: Database): PublicRoleRequestRecord[] {
+  return (
+    db.prepare("SELECT * FROM role_requests WHERE status = 'requested' ORDER BY created_at DESC LIMIT 250").all() as RoleRequestRow[]
+  ).map(mapPublicRoleRequest);
 }
 
 export function listRoleRequestsForRequester(db: Database, requester: string): RoleRequestRecord[] {

@@ -7,6 +7,7 @@ import { WebSocketServer } from "ws";
 import { openDatabase } from "./db.js";
 import {
   createRoleRequest,
+  listPublicRoleRequests,
   listRoleRequests,
   listRoleRequestsForRequester,
   reviewRoleRequest
@@ -990,7 +991,7 @@ app.get("/api/role-requests", (_request, response) => {
   response.json({
     generatedAt: new Date().toISOString(),
     channel: ROLE_REQUEST_CHANNEL_URL,
-    requests: listRoleRequests(db)
+    requests: listPublicRoleRequests(db)
   });
 });
 

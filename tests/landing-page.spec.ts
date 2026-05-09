@@ -392,6 +392,18 @@ test("role requests can be created and reviewed through sqlite APIs", async ({ p
   expect(rejectedCreateBody.request.status).toBe("rejected");
   expect(rejectedCreateBody.request.reviewer).toBe("admin");
   expect(rejectedCreateBody.request.reviewedAt).toBe(rejected.request.reviewedAt);
+
+  const publicList = await page.request.get("/api/role-requests");
+  expect(publicList.ok()).toBe(true);
+  const publicBody = await publicList.json();
+  expect(publicBody.requests.some((request: { id: string }) => request.id === created.request.id)).toBe(false);
+  expect(publicBody.requests.some((request: { id: string }) => request.id === rejectCreated.request.id)).toBe(false);
+  for (const request of publicBody.requests as Array<Record<string, unknown>>) {
+    expect(request.state).toBe("requested");
+    expect(request).not.toHaveProperty("reason");
+    expect(request).not.toHaveProperty("reviewer");
+    expect(request).not.toHaveProperty("reviewedAt");
+  }
 });
 
 test("global chat and system status remain persistent dashboard areas", async ({ page }) => {
