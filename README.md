@@ -30,7 +30,7 @@ Im Container wird der Pfad über `SQLITE_DB_PATH` gesetzt und durch `./data:/app
 docker compose up -d --build
 ```
 
-Mit `network_mode: host` lauscht der Container auf dem Host-Port `${PORT:-8090}` und der konfigurierten Host-Adresse `HOST` (`0.0.0.0` im Compose-Standard). Wenn der Dienst öffentlich gebunden ist, muss er per Firewall oder Reverse Proxy geschützt werden. Nginx terminiert TLS und proxyt die Hauptdomain sowie den WebSocket-Pfad.
+Mit `network_mode: host` lauscht der Container auf dem Host-Port `${PORT:-8090}` und der konfigurierten Host-Adresse `HOST`. Der Compose-Standard bindet an `127.0.0.1`, passend zur Nginx-Proxy-Konfiguration auf `127.0.0.1:8090`. Wenn Betreiber `HOST=0.0.0.0` setzen, ist der Port direkt über Host-Interfaces erreichbar und muss per Firewall, Reverse Proxy oder vergleichbaren Zugriffskontrollen geschützt werden.
 
 ## GitLab Modulnews
 
@@ -52,7 +52,7 @@ Unsichere oder Cross-Origin-URLs werden nicht veröffentlicht. Release- und Tag-
 
 ## Nginx aktivieren
 
-Auf dem Server läuft der Container ohne öffentliche Portfreigabe per Host-Networking. Für die Hauptdomain sind einmalig privilegierte Nginx/Certbot-Schritte nötig:
+Auf dem Server läuft der Container per Host-Networking mit Loopback-Bindung, sodass Nginx lokal auf `127.0.0.1:8090` proxyt. Host-Networking macht Listener nicht automatisch privat; die Bind-Adresse `HOST` und die Firewall-Regeln bestimmen die direkte Erreichbarkeit. Für die Hauptdomain sind einmalig privilegierte Nginx/Certbot-Schritte nötig:
 
 ```bash
 sudo cp deploy/nginx-schnick-schnack.info.bootstrap.conf /etc/nginx/sites-available/schnick-schnack.info

@@ -11,7 +11,7 @@ services:
     network_mode: host
     restart: unless-stopped
     environment:
-      HOST: 0.0.0.0
+      HOST: ${HOST:-127.0.0.1}
       PORT: ${PORT:-8090}
       HEALTH_INTERVAL_MS: ${HEALTH_INTERVAL_MS:-10000}
       INFO_TIMEOUT_MS: ${INFO_TIMEOUT_MS:-3500}
