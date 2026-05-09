@@ -871,7 +871,7 @@ function useRoleRequests() {
 
   async function loadRequests() {
     try {
-      const response = await fetch("/api/role-requests", { cache: "no-store" });
+      const response = await fetch("/api/role-requests/me", { cache: "no-store" });
       if (!response.ok) {
         throw new Error("Role requests unavailable");
       }

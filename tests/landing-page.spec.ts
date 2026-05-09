@@ -608,7 +608,19 @@ test("system rows keep public links and receive the active theme", async ({ page
 });
 
 test("module access shows missing-role request action", async ({ page }) => {
-  await page.route("**/api/role-requests", async (route) => {
+  await page.route("**/api/role-requests**", async (route) => {
+    const requestUrl = new URL(route.request().url());
+    if (route.request().method() === "GET" && requestUrl.pathname === "/api/role-requests/me") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          generatedAt: "2026-05-09T00:00:00.000Z",
+          requests: []
+        })
+      });
+      return;
+    }
+
     if (route.request().method() === "POST") {
       const body = route.request().postDataJSON() as { serviceId: string; reason?: string };
       expect(body.serviceId).toBe("schnack-to-text");
@@ -643,7 +655,18 @@ test("module access shows missing-role request action", async ({ page }) => {
       contentType: "application/json",
       body: JSON.stringify({
         generatedAt: "2026-05-09T00:00:00.000Z",
-        requests: []
+        requests: [
+          {
+            serviceId: "schnack-to-text",
+            serviceName: "Schnack To Text",
+            requiredRole: "schnack-to-text",
+            role: "schnack-to-text",
+            status: "requested",
+            state: "requested",
+            createdAt: "2026-05-09T00:00:00.000Z",
+            updatedAt: "2026-05-09T00:00:00.000Z"
+          }
+        ]
       })
     });
   });
